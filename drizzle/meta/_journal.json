@@ -15,6 +15,13 @@
       "when": 1786430633464,
       "tag": "0001_certain_chameleon",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1786432197458,
+      "tag": "0002_premium_purifiers",
+      "breakpoints": true
     }
   ]
 }

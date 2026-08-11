@@ -37,3 +37,23 @@ test("includes durable complaint capabilities and social metadata", async () => 
   assert.match(hosting, /"r2": "UPLOADS"/);
   assert.match(layout, /og\.png/);
 });
+
+test("includes separate information routes, theme controls, and accessible motion", async () => {
+  const [theme, css, how, accessibility, privacy, contact, contactApi] = await Promise.all([
+    readFile(new URL("app/ThemeToggle.tsx", root), "utf8"),
+    readFile(new URL("app/globals.css", root), "utf8"),
+    readFile(new URL("app/how-it-works/page.tsx", root), "utf8"),
+    readFile(new URL("app/accessibility/page.tsx", root), "utf8"),
+    readFile(new URL("app/privacy/page.tsx", root), "utf8"),
+    readFile(new URL("app/contact/page.tsx", root), "utf8"),
+    readFile(new URL("app/api/contact/route.ts", root), "utf8"),
+  ]);
+  assert.match(theme, /njc-theme/);
+  assert.match(css, /data-theme="dark"/);
+  assert.match(css, /prefers-reduced-motion/);
+  assert.match(how, /complaint lifecycle/i);
+  assert.match(accessibility, /WCAG 2\.2 AA/i);
+  assert.match(privacy, /What we collect/i);
+  assert.match(contact, /ContactForm/);
+  assert.match(contactApi, /contact_messages/);
+});

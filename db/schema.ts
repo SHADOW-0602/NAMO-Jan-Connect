@@ -78,3 +78,14 @@ export const feedback = sqliteTable("feedback", {
   comment: text("comment"),
   submittedAt: text("submitted_at").notNull(),
 }, (table) => [check("rating_between_1_and_5", sql`${table.rating} between 1 and 5`)]);
+
+export const contactMessages = sqliteTable("contact_messages", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+  topic: text("topic").notNull(),
+  trackingId: text("tracking_id"),
+  message: text("message").notNull(),
+  status: text("status").notNull().default("new"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [index("idx_contact_messages_created_at").on(table.createdAt)]);

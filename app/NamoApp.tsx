@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import ThemeToggle from "./ThemeToggle";
 
 type Portal = "public" | "citizen" | "department" | "admin";
 type Complaint = {
@@ -37,7 +38,7 @@ function formatDate(value: string) { return new Intl.DateTimeFormat("en-IN", { d
 function daysUntil(value: string) { return Math.ceil((new Date(value).getTime() - Date.now()) / 86400000); }
 
 function Brand({ light = false }: { light?: boolean }) {
-  return <button className={`brand ${light ? "brand-light" : ""}`} onClick={() => { window.scrollTo({ top: 0, behavior: "smooth" }); }} aria-label="NAMO Jan Connect home"><span className="brand-symbol"><i /><i /><i /></span><span><b>NAMO</b><small>JAN CONNECT</small></span></button>;
+  return <a className={`brand ${light ? "brand-light" : ""}`} href="/" aria-label="NAMO Jan Connect home"><span className="brand-symbol"><i /><i /><i /></span><span><b>NAMO</b><small>JAN CONNECT</small></span></a>;
 }
 
 function StatusPill({ status }: { status: string }) { return <span className={`status status-${status}`}><i />{statusLabels[status] ?? status}</span>; }
@@ -97,7 +98,7 @@ export default function NamoApp() {
 }
 
 function PublicHeader({ onFile, onTrack, onPortal, menuOpen, loadPortal }: { onFile: () => void; onTrack: () => void; onPortal: () => void; menuOpen: boolean; loadPortal: (portal: Portal) => void }) {
-  return <header className="public-header"><Brand /><nav aria-label="Primary navigation"><a href="#how">How it works</a><button onClick={onTrack}>Track complaint</button><a href="#transparency">Transparency</a></nav><div className="header-actions"><button className="btn btn-ghost" onClick={onPortal}>Sign in <span>⌄</span></button><button className="btn btn-dark" onClick={onFile}>File a complaint <span>↗</span></button></div>{menuOpen && <div className="portal-menu"><p>Open a workspace</p><button onClick={() => loadPortal("citizen")}><b>Citizen</b><small>Your complaints and updates</small></button><button onClick={() => loadPortal("department")}><b>Department</b><small>Assigned complaint queue</small></button><button onClick={() => loadPortal("admin")}><b>Administrator</b><small>Oversight and analytics</small></button></div>}</header>;
+  return <header className="public-header"><Brand /><nav aria-label="Primary navigation"><a href="/how-it-works">How it works</a><button onClick={onTrack}>Track complaint</button><a href="#transparency">Transparency</a></nav><div className="header-actions"><ThemeToggle /><button className="btn btn-ghost" onClick={onPortal}>Sign in <span>⌄</span></button><button className="btn btn-dark" onClick={onFile}>File a complaint <span>↗</span></button></div>{menuOpen && <div className="portal-menu"><p>Open a workspace</p><button onClick={() => loadPortal("citizen")}><b>Citizen</b><small>Your complaints and updates</small></button><button onClick={() => loadPortal("department")}><b>Department</b><small>Assigned complaint queue</small></button><button onClick={() => loadPortal("admin")}><b>Administrator</b><small>Oversight and analytics</small></button></div>}</header>;
 }
 
 function PublicHome({ stats, onFile, onTrack, loadPortal }: { stats: { total: number; resolved: number; active: number; avgDays: number }; onFile: () => void; onTrack: () => void; loadPortal: (portal: Portal) => void }) {
@@ -114,7 +115,7 @@ function PublicHome({ stats, onFile, onTrack, loadPortal }: { stats: { total: nu
 
 function PortalHeader({ portal, setPortal }: { portal: Portal; setPortal: (portal: Portal) => void }) {
   const title = portal === "citizen" ? "Citizen workspace" : portal === "department" ? "Civic Department" : "Administration";
-  return <header className="portal-header"><Brand /><div className="portal-title"><span />{title}</div><div className="portal-user"><button onClick={() => setPortal("public")}>Public site</button><span>{portal === "citizen" ? "AS" : portal === "department" ? "MN" : "NA"}</span><p><b>{portal === "citizen" ? "Aarav Sharma" : portal === "department" ? "Meera Nair" : "NJC Admin"}</b><small>{portal === "citizen" ? "Citizen" : portal === "department" ? "Department officer" : "System administrator"}</small></p></div></header>;
+  return <header className="portal-header"><Brand /><div className="portal-title"><span />{title}</div><div className="portal-user"><ThemeToggle /><button onClick={() => setPortal("public")}>Public site</button><span>{portal === "citizen" ? "AS" : portal === "department" ? "MN" : "NA"}</span><p><b>{portal === "citizen" ? "Aarav Sharma" : portal === "department" ? "Meera Nair" : "NJC Admin"}</b><small>{portal === "citizen" ? "Citizen" : portal === "department" ? "Department officer" : "System administrator"}</small></p></div></header>;
 }
 
 function Sidebar({ portal }: { portal: Portal }) {
@@ -163,5 +164,4 @@ function UpdateModal({ complaint, onClose, onChanged }: { complaint: Complaint; 
   return <Modal title="Update complaint" eyebrow={complaint.trackingId} onClose={onClose}><p className="modal-lede">This update will appear on the citizen&apos;s timeline and queue an email notification.</p><form className="update-form" onSubmit={submit}><label>New status<select value={status} onChange={(event) => setStatus(event.target.value)}>{(nextStatuses[complaint.status] ?? []).map((item) => <option key={item} value={item}>{statusLabels[item]}</option>)}</select></label><label>Public remark<textarea value={remarks} onChange={(event) => setRemarks(event.target.value)} minLength={5} required rows={4} placeholder="Explain what was done or what happens next..." /></label>{error && <p className="form-error">{error}</p>}<button className="btn btn-primary" disabled={busy}>{busy ? "Saving..." : "Publish update →"}</button></form></Modal>;
 }
 
-function Footer() { return <footer><Brand light /><div><p>Transparent public service, from first report to final resolution.</p><span>© 2026 NAMO Jan Connect</span></div><nav><a href="#how">How it works</a><button>Privacy</button><button>Accessibility</button><a href="mailto:support@namojanconnect.in">Contact</a></nav></footer>; }
-
+function Footer() { return <footer><Brand light /><div><p>Transparent public service, from first report to final resolution.</p><span>© 2026 NAMO Jan Connect</span></div><nav><a href="/how-it-works">How it works</a><a href="/privacy">Privacy</a><a href="/accessibility">Accessibility</a><a href="/contact">Contact</a></nav></footer>; }
