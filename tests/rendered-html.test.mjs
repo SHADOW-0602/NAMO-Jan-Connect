@@ -75,3 +75,22 @@ test("supports GPS pinning and verified resolved-evidence galleries", async () =
   assert.match(aboutPage, /Public concerns deserve a public trail/i);
   assert.match(galleryPage, /ResolvedGallery/);
 });
+
+test("supports anonymous citizen intake and isolated staff URLs", async () => {
+  const [app, api, schema, admin, department] = await Promise.all([
+    readFile(new URL("app/NamoApp.tsx", root), "utf8"),
+    readFile(new URL("app/api/complaints/route.ts", root), "utf8"),
+    readFile(new URL("db/schema.ts", root), "utf8"),
+    readFile(new URL("app/admin/page.tsx", root), "utf8"),
+    readFile(new URL("app/department/[slug]/page.tsx", root), "utf8"),
+  ]);
+  assert.match(app, /NO ACCOUNT OR LOGIN REQUIRED/);
+  assert.match(app, /name="citizenPhone"/);
+  assert.match(app, /name="citizenEmail"/);
+  assert.match(api, /anonymousCitizen/);
+  assert.match(api, /assign_department/);
+  assert.match(schema, /departmentPortals/);
+  assert.match(admin, /ADMIN_EMAIL/);
+  assert.match(department, /department_portals/);
+  assert.match(department, /requireChatGPTUser/);
+});

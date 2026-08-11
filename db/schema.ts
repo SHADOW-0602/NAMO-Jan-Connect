@@ -20,6 +20,14 @@ export const users = sqliteTable("users", {
   createdAt: text("created_at").notNull(),
 });
 
+export const departmentPortals = sqliteTable("department_portals", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  departmentId: integer("department_id").notNull().unique().references(() => departments.id),
+  portalId: text("portal_id").notNull().unique(),
+  staffEmail: text("staff_email"),
+  updatedAt: text("updated_at").notNull(),
+});
+
 export const complaints = sqliteTable("complaints", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   trackingId: text("tracking_id").notNull().unique(),

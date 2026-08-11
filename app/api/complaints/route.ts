@@ -27,6 +27,7 @@ async function ensureDatabase() {
   const statements = [
     `CREATE TABLE IF NOT EXISTS departments (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, category TEXT NOT NULL UNIQUE, region TEXT NOT NULL DEFAULT 'National Capital Region', sla_days INTEGER NOT NULL DEFAULT 7)`,
     `CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, external_id TEXT NOT NULL UNIQUE, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE, phone TEXT, role TEXT NOT NULL DEFAULT 'citizen', department_id INTEGER REFERENCES departments(id), created_at TEXT NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS department_portals (id INTEGER PRIMARY KEY AUTOINCREMENT, department_id INTEGER NOT NULL UNIQUE REFERENCES departments(id), portal_id TEXT NOT NULL UNIQUE, staff_email TEXT, updated_at TEXT NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS complaints (id INTEGER PRIMARY KEY AUTOINCREMENT, tracking_id TEXT NOT NULL UNIQUE, citizen_id INTEGER NOT NULL REFERENCES users(id), category TEXT NOT NULL, department_id INTEGER NOT NULL REFERENCES departments(id), title TEXT NOT NULL, description TEXT NOT NULL, location_text TEXT NOT NULL, latitude REAL, longitude REAL, status TEXT NOT NULL DEFAULT 'submitted', priority TEXT NOT NULL DEFAULT 'medium', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, resolved_at TEXT, sla_due_at TEXT NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS complaint_attachments (id INTEGER PRIMARY KEY AUTOINCREMENT, complaint_id INTEGER NOT NULL REFERENCES complaints(id), object_key TEXT NOT NULL, file_url TEXT NOT NULL, file_type TEXT NOT NULL DEFAULT 'image', uploaded_by INTEGER NOT NULL REFERENCES users(id), uploaded_at TEXT NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS status_history (id INTEGER PRIMARY KEY AUTOINCREMENT, complaint_id INTEGER NOT NULL REFERENCES complaints(id), old_status TEXT, new_status TEXT NOT NULL, remarks TEXT NOT NULL, changed_by INTEGER NOT NULL REFERENCES users(id), changed_at TEXT NOT NULL)`,
@@ -43,6 +44,8 @@ async function ensureDatabase() {
   for (const [category, detail] of Object.entries(categories)) {
     await db.prepare(`INSERT OR IGNORE INTO departments (name, category, sla_days) VALUES (?, ?, ?)`).bind(detail.name, category, detail.sla).run();
   }
+  const portalIds: Record<string, string> = { civic_infra: "NJC-CIVIC-01", health_edu: "NJC-HEALTH-01", law_order: "NJC-SAFETY-01", transport: "NJC-TRANSPORT-01", employment_welfare: "NJC-WELFARE-01" };
+  for (const [category, portalId] of Object.entries(portalIds)) await db.prepare(`INSERT OR IGNORE INTO department_portals (department_id, portal_id, updated_at) SELECT id, ?, ? FROM departments WHERE category=?`).bind(portalId, new Date().toISOString(), category).run();
   await seedDemoData();
   return db;
 }
@@ -87,13 +90,29 @@ async function actorFor(request: NextRequest): Promise<Actor | null> {
     let name = email;
     try { if (fullName) name = decodeURIComponent(fullName); } catch {}
     await db.prepare(`INSERT INTO users (external_id, name, email, role, created_at) VALUES (?, ?, ?, 'citizen', ?) ON CONFLICT(external_id) DO UPDATE SET name=excluded.name, email=excluded.email`).bind(userId, name, email, new Date().toISOString()).run();
+    const runtime = env as unknown as { ADMIN_EMAIL?: string };
+    const isAdmin = runtime.ADMIN_EMAIL && email.toLowerCase() === runtime.ADMIN_EMAIL.toLowerCase();
+    const department = await db.prepare(`SELECT department_id AS departmentId FROM department_portals WHERE lower(staff_email)=lower(?)`).bind(email).first<{ departmentId: number }>();
+    if (isAdmin) await db.prepare(`UPDATE users SET role='admin', department_id=NULL WHERE external_id=?`).bind(userId).run();
+    else if (department) await db.prepare(`UPDATE users SET role='department_staff', department_id=? WHERE external_id=?`).bind(department.departmentId, userId).run();
   }
   const row = await db.prepare(`SELECT id, name, email, role, department_id AS departmentId FROM users WHERE external_id=?`).bind(externalId).first<Actor>();
   return row ?? null;
 }
 
+async function anonymousCitizen(name: string, email: string, phone: string): Promise<Actor> {
+  const normalizedEmail = email.trim().toLowerCase();
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(normalizedEmail));
+  const externalId = `anonymous:${Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+  const now = new Date().toISOString();
+  await env.DB.prepare(`INSERT INTO users (external_id, name, email, phone, role, created_at) VALUES (?, ?, ?, ?, 'citizen', ?) ON CONFLICT(email) DO UPDATE SET name=excluded.name, phone=excluded.phone`).bind(externalId, name, normalizedEmail, phone, now).run();
+  const actor = await env.DB.prepare(`SELECT id, name, email, role, department_id AS departmentId FROM users WHERE email=?`).bind(normalizedEmail).first<Actor>();
+  if (!actor) throw new Error("Unable to create citizen record");
+  return actor;
+}
+
 function complaintSelect(where = "", order = "ORDER BY c.created_at DESC") {
-  return `SELECT c.id, c.tracking_id AS trackingId, c.title, c.description, c.location_text AS location, c.category, c.status, c.priority, c.created_at AS createdAt, c.updated_at AS updatedAt, c.sla_due_at AS slaDueAt, c.resolved_at AS resolvedAt, d.name AS department, d.id AS departmentId, u.name AS citizenName FROM complaints c JOIN departments d ON d.id=c.department_id JOIN users u ON u.id=c.citizen_id ${where} ${order}`;
+  return `SELECT c.id, c.tracking_id AS trackingId, c.title, c.description, c.location_text AS location, c.latitude, c.longitude, c.category, c.status, c.priority, c.created_at AS createdAt, c.updated_at AS updatedAt, c.sla_due_at AS slaDueAt, c.resolved_at AS resolvedAt, d.name AS department, d.id AS departmentId, u.name AS citizenName, u.email AS citizenEmail, u.phone AS citizenPhone FROM complaints c JOIN departments d ON d.id=c.department_id JOIN users u ON u.id=c.citizen_id ${where} ${order}`;
 }
 
 async function withHistory(complaint: Record<string, unknown>) {
@@ -134,7 +153,8 @@ export async function GET(request: NextRequest) {
       if (actor.role !== "admin") return NextResponse.json({ error: "Admin access required" }, { status: 403 });
       const complaints = await db.prepare(complaintSelect()).all();
       const summary = await db.prepare(`SELECT COUNT(*) AS total, SUM(CASE WHEN status='resolved' THEN 1 ELSE 0 END) AS resolved, SUM(CASE WHEN julianday(sla_due_at) < julianday('now') AND status NOT IN ('resolved','rejected') THEN 1 ELSE 0 END) AS overdue FROM complaints`).first();
-      return NextResponse.json({ actor, complaints: complaints.results, summary });
+      const departmentAccess = await db.prepare(`SELECT dp.department_id AS departmentId, dp.portal_id AS portalId, dp.staff_email AS staffEmail, d.name AS department, d.category FROM department_portals dp JOIN departments d ON d.id=dp.department_id ORDER BY d.id`).all();
+      return NextResponse.json({ actor, complaints: complaints.results, summary, departmentAccess: departmentAccess.results });
     }
     return NextResponse.json({ error: "Unknown scope" }, { status: 400 });
   } catch (error) {
@@ -145,10 +165,10 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const db = await ensureDatabase();
-    const actor = await actorFor(request);
-    if (!actor) return NextResponse.json({ error: "Sign in required" }, { status: 401 });
     const contentType = request.headers.get("content-type") ?? "";
     if (contentType.includes("application/json")) {
+      const actor = await actorFor(request);
+      if (!actor) return NextResponse.json({ error: "Sign in required for feedback" }, { status: 401 });
       const payload = await request.json() as { action?: string; complaintId?: number; rating?: number; comment?: string };
       if (payload.action !== "feedback" || !payload.complaintId || !payload.rating || payload.rating < 1 || payload.rating > 5) return NextResponse.json({ error: "Invalid feedback" }, { status: 400 });
       const owned = await db.prepare(`SELECT id FROM complaints WHERE id=? AND citizen_id=? AND status='resolved'`).bind(payload.complaintId, actor.id).first();
@@ -158,6 +178,9 @@ export async function POST(request: NextRequest) {
     }
     const form = await request.formData();
     const category = String(form.get("category") ?? "");
+    const citizenName = String(form.get("citizenName") ?? "").trim();
+    const citizenEmail = String(form.get("citizenEmail") ?? "").trim().toLowerCase();
+    const citizenPhone = String(form.get("citizenPhone") ?? "").replace(/[\s()-]/g, "");
     const title = String(form.get("title") ?? "").trim();
     const description = String(form.get("description") ?? "").trim();
     const location = String(form.get("location") ?? "").trim();
@@ -167,7 +190,11 @@ export async function POST(request: NextRequest) {
     const longitude = longitudeValue ? Number(longitudeValue) : null;
     if (latitude !== null && (!Number.isFinite(latitude) || latitude < -90 || latitude > 90)) return NextResponse.json({ error: "Invalid latitude" }, { status: 400 });
     if (longitude !== null && (!Number.isFinite(longitude) || longitude < -180 || longitude > 180)) return NextResponse.json({ error: "Invalid longitude" }, { status: 400 });
+    if (citizenName.length < 2 || !/^\S+@\S+\.\S+$/.test(citizenEmail) || !/^\+?[0-9]{10,15}$/.test(citizenPhone)) return NextResponse.json({ error: "Please provide a valid name, email, and phone number" }, { status: 400 });
     if (!categories[category] || title.length < 6 || description.length < 20 || !location) return NextResponse.json({ error: "Please complete all complaint details" }, { status: 400 });
+    const signedActor = await actorFor(request);
+    const actor = signedActor?.role === "citizen" ? signedActor : await anonymousCitizen(citizenName, citizenEmail, citizenPhone);
+    await db.prepare(`UPDATE users SET name=?, phone=? WHERE id=?`).bind(citizenName, citizenPhone, actor.id).run();
     const recent = await db.prepare(`SELECT COUNT(*) AS count FROM complaints WHERE citizen_id=? AND created_at >= datetime('now','-1 day')`).bind(actor.id).first<{ count: number }>();
     if ((recent?.count ?? 0) >= 10) return NextResponse.json({ error: "Daily complaint limit reached" }, { status: 429 });
     const department = await db.prepare(`SELECT id, name, sla_days AS sla FROM departments WHERE category=?`).bind(category).first<{ id: number; name: string; sla: number }>();
@@ -198,14 +225,21 @@ export async function PATCH(request: NextRequest) {
     const actor = await actorFor(request);
     if (!actor || (actor.role !== "department_staff" && actor.role !== "admin")) return NextResponse.json({ error: "Staff access required" }, { status: 403 });
     const contentType = request.headers.get("content-type") ?? "";
-    let payload: { complaintId?: number; status?: string; remarks?: string; departmentId?: number };
+    let payload: { action?: string; complaintId?: number; status?: string; remarks?: string; departmentId?: number; staffEmail?: string };
     let resolutionPhoto: File | null = null;
     if (contentType.includes("multipart/form-data")) {
       const form = await request.formData();
       payload = { complaintId: Number(form.get("complaintId")), status: String(form.get("status") ?? ""), remarks: String(form.get("remarks") ?? ""), departmentId: form.get("departmentId") ? Number(form.get("departmentId")) : undefined };
       const candidate = form.get("resolutionPhoto");
       resolutionPhoto = candidate instanceof File && candidate.size > 0 ? candidate : null;
-    } else payload = await request.json() as { complaintId?: number; status?: string; remarks?: string; departmentId?: number };
+    } else payload = await request.json() as { action?: string; complaintId?: number; status?: string; remarks?: string; departmentId?: number; staffEmail?: string };
+    if (payload.action === "assign_department") {
+      if (actor.role !== "admin" || !payload.departmentId) return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+      const staffEmail = String(payload.staffEmail ?? "").trim().toLowerCase();
+      if (staffEmail && !/^\S+@\S+\.\S+$/.test(staffEmail)) return NextResponse.json({ error: "Enter a valid staff email" }, { status: 400 });
+      await db.prepare(`UPDATE department_portals SET staff_email=?, updated_at=? WHERE department_id=?`).bind(staffEmail || null, new Date().toISOString(), payload.departmentId).run();
+      return NextResponse.json({ ok: true });
+    }
     const complaint = await db.prepare(`SELECT id, status, citizen_id AS citizenId, department_id AS departmentId, tracking_id AS trackingId FROM complaints WHERE id=?`).bind(payload.complaintId).first<{ id: number; status: string; citizenId: number; departmentId: number; trackingId: string }>();
     if (!complaint) return NextResponse.json({ error: "Complaint not found" }, { status: 404 });
     if (actor.role === "department_staff" && actor.departmentId !== complaint.departmentId) return NextResponse.json({ error: "Complaint belongs to another department" }, { status: 403 });
