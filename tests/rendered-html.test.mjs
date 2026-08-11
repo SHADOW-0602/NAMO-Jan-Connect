@@ -57,3 +57,21 @@ test("includes separate information routes, theme controls, and accessible motio
   assert.match(contact, /ContactForm/);
   assert.match(contactApi, /contact_messages/);
 });
+
+test("supports GPS pinning and verified resolved-evidence galleries", async () => {
+  const [locationPicker, gallery, complaintsApi, aboutPage, galleryPage] = await Promise.all([
+    readFile(new URL("app/LocationPicker.tsx", root), "utf8"),
+    readFile(new URL("app/ResolvedGallery.tsx", root), "utf8"),
+    readFile(new URL("app/api/complaints/route.ts", root), "utf8"),
+    readFile(new URL("app/about/page.tsx", root), "utf8"),
+    readFile(new URL("app/gallery/page.tsx", root), "utf8"),
+  ]);
+  assert.match(locationPicker, /navigator\.geolocation/);
+  assert.match(locationPicker, /tile\.openstreetmap\.org/);
+  assert.match(locationPicker, /name="latitude"/);
+  assert.match(gallery, /scope=gallery/);
+  assert.match(complaintsApi, /resolution_image/);
+  assert.match(complaintsApi, /latitude, longitude/);
+  assert.match(aboutPage, /Public concerns deserve a public trail/i);
+  assert.match(galleryPage, /ResolvedGallery/);
+});

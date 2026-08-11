@@ -22,6 +22,13 @@
       "when": 1786432197458,
       "tag": "0002_premium_purifiers",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1786432875777,
+      "tag": "0003_dusty_vulture",
+      "breakpoints": true
     }
   ]
 }

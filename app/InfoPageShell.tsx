@@ -7,7 +7,7 @@ export default function InfoPageShell({ eyebrow, title, intro, children }: { eye
     <div className="info-shell">
       <header className="info-header">
         <a className="brand" href="/" aria-label="NAMO Jan Connect home"><span className="brand-symbol"><i /><i /><i /></span><span><b>NAMO</b><small>JAN CONNECT</small></span></a>
-        <nav aria-label="Information pages"><a href="/how-it-works">How it works</a><a href="/accessibility">Accessibility</a><a href="/privacy">Privacy</a><a href="/contact">Contact</a></nav>
+        <nav aria-label="Information pages"><a href="/how-it-works">How it works</a><a href="/about">About us</a><a href="/gallery">Gallery</a><a href="/contact">Contact</a></nav>
         <div className="info-header-actions"><ThemeToggle /><a className="btn btn-dark" href="/">Open platform <span>↗</span></a></div>
       </header>
       <main className="info-page">
@@ -17,9 +17,8 @@ export default function InfoPageShell({ eyebrow, title, intro, children }: { eye
       <footer className="info-footer">
         <a className="brand brand-light" href="/" aria-label="NAMO Jan Connect home"><span className="brand-symbol"><i /><i /><i /></span><span><b>NAMO</b><small>JAN CONNECT</small></span></a>
         <div><p>Transparent public service, from first report to final resolution.</p><span>© 2026 NAMO Jan Connect</span></div>
-        <nav><a href="/how-it-works">How it works</a><a href="/privacy">Privacy</a><a href="/accessibility">Accessibility</a><a href="/contact">Contact</a></nav>
+        <nav><a href="/how-it-works">How it works</a><a href="/about">About us</a><a href="/gallery">Resolved gallery</a><a href="/privacy">Privacy</a><a href="/accessibility">Accessibility</a><a href="/contact">Contact</a></nav>
       </footer>
     </div>
   );
 }
-

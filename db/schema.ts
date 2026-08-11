@@ -40,6 +40,7 @@ export const complaints = sqliteTable("complaints", {
 }, (table) => [
   index("idx_complaints_citizen").on(table.citizenId),
   index("idx_complaints_department_status").on(table.departmentId, table.status),
+  index("idx_complaints_resolved_public").on(table.status, table.resolvedAt).where(sql`${table.status} = 'resolved'`),
 ]);
 
 export const complaintAttachments = sqliteTable("complaint_attachments", {
@@ -50,7 +51,7 @@ export const complaintAttachments = sqliteTable("complaint_attachments", {
   fileType: text("file_type").notNull().default("image"),
   uploadedBy: integer("uploaded_by").notNull().references(() => users.id),
   uploadedAt: text("uploaded_at").notNull(),
-});
+}, (table) => [index("idx_attachments_complaint").on(table.complaintId)]);
 
 export const statusHistory = sqliteTable("status_history", {
   id: integer("id").primaryKey({ autoIncrement: true }),

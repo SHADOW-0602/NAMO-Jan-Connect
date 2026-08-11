@@ -34,8 +34,10 @@ async function ensureDatabase() {
     `CREATE TABLE IF NOT EXISTS feedback (id INTEGER PRIMARY KEY AUTOINCREMENT, complaint_id INTEGER NOT NULL UNIQUE REFERENCES complaints(id), rating INTEGER NOT NULL CHECK(rating BETWEEN 1 AND 5), comment TEXT, submitted_at TEXT NOT NULL)`,
     `CREATE INDEX IF NOT EXISTS idx_complaints_citizen ON complaints(citizen_id)`,
     `CREATE INDEX IF NOT EXISTS idx_complaints_department_status ON complaints(department_id, status)`,
+    `CREATE INDEX IF NOT EXISTS idx_complaints_resolved_public ON complaints(status, resolved_at) WHERE status='resolved'`,
     `CREATE INDEX IF NOT EXISTS idx_complaints_tracking ON complaints(tracking_id)`,
     `CREATE INDEX IF NOT EXISTS idx_history_complaint ON status_history(complaint_id, changed_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_attachments_complaint ON complaint_attachments(complaint_id)`,
   ];
   await db.batch(statements.map((sql) => db.prepare(sql)));
   for (const [category, detail] of Object.entries(categories)) {
@@ -113,6 +115,10 @@ export async function GET(request: NextRequest) {
       const departments = await db.prepare(`SELECT d.name, d.category, COUNT(c.id) AS total, SUM(CASE WHEN c.status='resolved' THEN 1 ELSE 0 END) AS resolved FROM departments d LEFT JOIN complaints c ON c.department_id=d.id GROUP BY d.id ORDER BY d.id`).all();
       return NextResponse.json({ summary, departments: departments.results });
     }
+    if (scope === "gallery") {
+      const items = await db.prepare(`SELECT c.id, c.tracking_id AS trackingId, c.title, c.location_text AS location, c.category, c.resolved_at AS resolvedAt, d.name AS department, (SELECT a.file_url FROM complaint_attachments a WHERE a.complaint_id=c.id AND a.file_type='resolution_image' ORDER BY a.uploaded_at DESC LIMIT 1) AS imageUrl FROM complaints c JOIN departments d ON d.id=c.department_id WHERE c.status='resolved' AND c.resolved_at IS NOT NULL AND EXISTS (SELECT 1 FROM complaint_attachments a WHERE a.complaint_id=c.id AND a.file_type='resolution_image') ORDER BY c.resolved_at DESC LIMIT 24`).all();
+      return NextResponse.json({ items: items.results }, { headers: { "cache-control": "public, max-age=60" } });
+    }
     const actor = await actorFor(request);
     if (!actor) return NextResponse.json({ error: "Sign in required" }, { status: 401 });
     if (scope === "mine") {
@@ -155,6 +161,12 @@ export async function POST(request: NextRequest) {
     const title = String(form.get("title") ?? "").trim();
     const description = String(form.get("description") ?? "").trim();
     const location = String(form.get("location") ?? "").trim();
+    const latitudeValue = String(form.get("latitude") ?? "").trim();
+    const longitudeValue = String(form.get("longitude") ?? "").trim();
+    const latitude = latitudeValue ? Number(latitudeValue) : null;
+    const longitude = longitudeValue ? Number(longitudeValue) : null;
+    if (latitude !== null && (!Number.isFinite(latitude) || latitude < -90 || latitude > 90)) return NextResponse.json({ error: "Invalid latitude" }, { status: 400 });
+    if (longitude !== null && (!Number.isFinite(longitude) || longitude < -180 || longitude > 180)) return NextResponse.json({ error: "Invalid longitude" }, { status: 400 });
     if (!categories[category] || title.length < 6 || description.length < 20 || !location) return NextResponse.json({ error: "Please complete all complaint details" }, { status: 400 });
     const recent = await db.prepare(`SELECT COUNT(*) AS count FROM complaints WHERE citizen_id=? AND created_at >= datetime('now','-1 day')`).bind(actor.id).first<{ count: number }>();
     if ((recent?.count ?? 0) >= 10) return NextResponse.json({ error: "Daily complaint limit reached" }, { status: 429 });
@@ -163,7 +175,7 @@ export async function POST(request: NextRequest) {
     const trackingId = `NJC-${new Date().getFullYear()}-${String(seq?.next ?? 1).padStart(6, "0")}`;
     const now = new Date();
     const due = new Date(now.getTime() + (department?.sla ?? 7) * 86400000);
-    const result = await db.prepare(`INSERT INTO complaints (tracking_id, citizen_id, category, department_id, title, description, location_text, status, priority, created_at, updated_at, sla_due_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'submitted', 'medium', ?, ?, ?)`).bind(trackingId, actor.id, category, department!.id, title, description, location, now.toISOString(), now.toISOString(), due.toISOString()).run();
+    const result = await db.prepare(`INSERT INTO complaints (tracking_id, citizen_id, category, department_id, title, description, location_text, latitude, longitude, status, priority, created_at, updated_at, sla_due_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', 'medium', ?, ?, ?)`).bind(trackingId, actor.id, category, department!.id, title, description, location, latitude, longitude, now.toISOString(), now.toISOString(), due.toISOString()).run();
     const complaintId = Number(result.meta.last_row_id);
     await db.prepare(`INSERT INTO status_history (complaint_id, old_status, new_status, remarks, changed_by, changed_at) VALUES (?, NULL, 'submitted', ?, ?, ?)`).bind(complaintId, `Complaint received and routed to ${department!.name}.`, actor.id, now.toISOString()).run();
     await db.prepare(`INSERT INTO email_logs (complaint_id, recipient, subject, status, sent_at) VALUES (?, ?, ?, 'queued', ?)`).bind(complaintId, actor.email, `${trackingId} received by ${department!.name}`, now.toISOString()).run();
@@ -172,7 +184,7 @@ export async function POST(request: NextRequest) {
       if (!file.type.startsWith("image/") || file.size > 5 * 1024 * 1024) continue;
       const key = `complaints/${complaintId}/${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "-")}`;
       if (env.UPLOADS) await env.UPLOADS.put(key, file.stream(), { httpMetadata: { contentType: file.type } });
-      await db.prepare(`INSERT INTO complaint_attachments (complaint_id, object_key, file_url, file_type, uploaded_by, uploaded_at) VALUES (?, ?, ?, 'image', ?, ?)`).bind(complaintId, key, `/api/uploads?key=${encodeURIComponent(key)}`, actor.id, now.toISOString()).run();
+      await db.prepare(`INSERT INTO complaint_attachments (complaint_id, object_key, file_url, file_type, uploaded_by, uploaded_at) VALUES (?, ?, ?, 'evidence_image', ?, ?)`).bind(complaintId, key, `/api/uploads?key=${encodeURIComponent(key)}`, actor.id, now.toISOString()).run();
     }
     return NextResponse.json({ ok: true, trackingId, department: department!.name }, { status: 201 });
   } catch (error) {
@@ -185,7 +197,15 @@ export async function PATCH(request: NextRequest) {
     const db = await ensureDatabase();
     const actor = await actorFor(request);
     if (!actor || (actor.role !== "department_staff" && actor.role !== "admin")) return NextResponse.json({ error: "Staff access required" }, { status: 403 });
-    const payload = await request.json() as { complaintId?: number; status?: string; remarks?: string; departmentId?: number };
+    const contentType = request.headers.get("content-type") ?? "";
+    let payload: { complaintId?: number; status?: string; remarks?: string; departmentId?: number };
+    let resolutionPhoto: File | null = null;
+    if (contentType.includes("multipart/form-data")) {
+      const form = await request.formData();
+      payload = { complaintId: Number(form.get("complaintId")), status: String(form.get("status") ?? ""), remarks: String(form.get("remarks") ?? ""), departmentId: form.get("departmentId") ? Number(form.get("departmentId")) : undefined };
+      const candidate = form.get("resolutionPhoto");
+      resolutionPhoto = candidate instanceof File && candidate.size > 0 ? candidate : null;
+    } else payload = await request.json() as { complaintId?: number; status?: string; remarks?: string; departmentId?: number };
     const complaint = await db.prepare(`SELECT id, status, citizen_id AS citizenId, department_id AS departmentId, tracking_id AS trackingId FROM complaints WHERE id=?`).bind(payload.complaintId).first<{ id: number; status: string; citizenId: number; departmentId: number; trackingId: string }>();
     if (!complaint) return NextResponse.json({ error: "Complaint not found" }, { status: 404 });
     if (actor.role === "department_staff" && actor.departmentId !== complaint.departmentId) return NextResponse.json({ error: "Complaint belongs to another department" }, { status: 403 });
@@ -195,15 +215,20 @@ export async function PATCH(request: NextRequest) {
     }
     const remarks = (payload.remarks ?? "").trim();
     if (!payload.status || !allowedTransitions[complaint.status]?.includes(payload.status) || remarks.length < 5) return NextResponse.json({ error: "Select a valid next status and add a meaningful remark" }, { status: 400 });
+    if (payload.status === "resolved" && resolutionPhoto && (!resolutionPhoto.type.startsWith("image/") || resolutionPhoto.size > 5 * 1024 * 1024)) return NextResponse.json({ error: "Resolution photo must be an image under 5 MB" }, { status: 400 });
     const now = new Date().toISOString();
     await db.batch([
       db.prepare(`UPDATE complaints SET status=?, updated_at=?, resolved_at=? WHERE id=?`).bind(payload.status, now, payload.status === "resolved" ? now : null, complaint.id),
       db.prepare(`INSERT INTO status_history (complaint_id, old_status, new_status, remarks, changed_by, changed_at) VALUES (?, ?, ?, ?, ?, ?)`).bind(complaint.id, complaint.status, payload.status, remarks, actor.id, now),
       db.prepare(`INSERT INTO email_logs (complaint_id, recipient, subject, status, sent_at) SELECT ?, email, ?, 'queued', ? FROM users WHERE id=?`).bind(complaint.id, `${complaint.trackingId} status updated`, now, complaint.citizenId),
     ]);
+    if (payload.status === "resolved" && resolutionPhoto) {
+      const key = `complaints/${complaint.id}/resolution-${crypto.randomUUID()}-${resolutionPhoto.name.replace(/[^a-zA-Z0-9._-]/g, "-")}`;
+      if (env.UPLOADS) await env.UPLOADS.put(key, resolutionPhoto.stream(), { httpMetadata: { contentType: resolutionPhoto.type } });
+      await db.prepare(`INSERT INTO complaint_attachments (complaint_id, object_key, file_url, file_type, uploaded_by, uploaded_at) VALUES (?, ?, ?, 'resolution_image', ?, ?)`).bind(complaint.id, key, `/api/uploads?key=${encodeURIComponent(key)}`, actor.id, now).run();
+    }
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unexpected error" }, { status: 500 });
   }
 }
-

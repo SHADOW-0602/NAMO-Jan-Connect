@@ -1,0 +1,13 @@
+import type { Metadata } from "next";
+import InfoPageShell from "../InfoPageShell";
+
+export const metadata: Metadata = { title: "About us | NAMO Jan Connect", description: "Why NAMO Jan Connect exists and how transparent complaint management improves public service." };
+
+export default function AboutPage() {
+  return <InfoPageShell eyebrow="BUILT FOR PUBLIC TRUST" title={<>A clearer connection between <em>people and action.</em></>} intro="NAMO Jan Connect is a self-contained complaint-management platform designed to make responsibility, progress, and outcomes visible to everyone involved.">
+    <section className="info-section two-column about-intro reveal-on-view"><div><p className="eyebrow">WHY WE EXIST</p><h2>Public concerns deserve a public trail.</h2></div><div><p>Citizens often know how to report a problem, but not what happens next. Departments may be working, yet the work is difficult to see. NAMO Jan Connect gives both sides one shared record—from the first description to the final resolution remark.</p><p>The platform does not connect to or impersonate an external government system. Departments, queues, routing rules, evidence, and staff accounts all live inside this platform.</p></div></section>
+    <section className="info-band values-band reveal-on-view"><div><p className="eyebrow">WHAT GUIDES US</p><h2>Trust is a product feature.</h2></div><div className="values-list"><article><b>Transparency</b><p>Citizens can see the same status and remarks departments record.</p></article><article><b>Accountability</b><p>Every action has an owner, timestamp, and visible next step.</p></article><article><b>Accessibility</b><p>Clear language, flexible themes, and inclusive interaction patterns.</p></article><article><b>Privacy</b><p>Personal details stay protected while outcomes remain measurable.</p></article></div></section>
+    <section className="info-section reveal-on-view"><div className="info-section-heading"><p className="eyebrow">ONE PLATFORM, FOUR VIEWS</p><h2>Designed around each participant.</h2></div><div className="principle-grid"><article><span>01</span><h3>Citizens</h3><p>File, locate, track, review evidence, and rate the outcome.</p></article><article><span>02</span><h3>Departments</h3><p>Work a focused queue, publish remarks, and resolve with proof.</p></article><article><span>03</span><h3>Administrators</h3><p>Manage routing, workload, SLA risk, accounts, and audit history.</p></article><article><span>04</span><h3>The public</h3><p>See anonymized performance and verified resolution evidence.</p></article></div></section>
+  </InfoPageShell>;
+}
+
