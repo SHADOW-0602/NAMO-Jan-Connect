@@ -1,100 +1,131 @@
-# vinext-starter
+# NAMO Jan Connect
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+A Cloudflare-native complaint-management platform with anonymous citizen reporting, isolated department queues, and central administrator oversight.
 
-## Prerequisites
+## Production architecture
 
-- Node.js `>=22.13.0`
+| Layer | Cloudflare service | Purpose |
+|---|---|---|
+| Frontend | Pages | React 19 + Vite single-page application |
+| API | Python Workers | Authentication, complaint routing, tracking, and administration |
+| Relational data | D1 | Citizens, departments, complaints, history, sessions, and contact records |
+| Object storage | R2 Standard | Complaint evidence and department resolution photographs |
 
-## Quick Start
+No application data is written to local SQLite, PostgreSQL, or a local uploads folder. The Worker accesses D1 and R2 through native bindings; no database passwords or R2 access keys are exposed to the application.
 
-```bash
+Python Workers are currently a Cloudflare beta feature. The implementation uses the required `python_workers` compatibility flag.
+
+## Repository layout
+
+- `frontend/` - React, Vite, Pages configuration, and SPA redirects.
+- `backend/src/` - Python Worker API.
+- `backend/migrations/` - D1 schema and initial department portal records.
+- `backend/wrangler.jsonc` - Worker, D1, and R2 binding configuration.
+- `.env.example` - local frontend values and required Worker secret names.
+
+## Cloudflare provisioning
+
+Install Node.js, Wrangler, Python 3.13+, `uv`, and the Python Worker tooling. Authenticate Wrangler with your Cloudflare account before provisioning.
+
+1. Create the D1 database:
+
+```powershell
+npx wrangler d1 create namo-jan-connect
+```
+
+Copy the returned database ID into `backend/wrangler.jsonc`, replacing `REPLACE_WITH_D1_DATABASE_ID`.
+
+2. Create the private R2 bucket:
+
+```powershell
+npx wrangler r2 bucket create namo-jan-connect-evidence
+```
+
+3. Apply the D1 schema and seed the five department portal IDs:
+
+```powershell
+cd backend
+npx wrangler d1 migrations apply namo-jan-connect --remote
+```
+
+4. Configure encrypted staff credentials:
+
+```powershell
+uv run pywrangler secret put ADMIN_EMAIL
+uv run pywrangler secret put ADMIN_PASSWORD
+```
+
+5. Deploy the Python Worker:
+
+```powershell
+uv run pywrangler deploy
+```
+
+6. Set `VITE_API_URL` to the deployed Worker URL and deploy React to Pages:
+
+```powershell
+npm run deploy:frontend
+```
+
+In the deployed Worker, change `FRONTEND_URL` from localhost to the final Pages or custom-domain URL so CORS allows the production frontend.
+
+## Local development
+
+Wrangler provides local D1 and R2 simulations under `.wrangler/`; production data is not modified during ordinary local development.
+
+```powershell
+copy .env.example .env
 npm install
-npm run dev
-npm run build
+npm run dev:backend
 ```
 
-This starter does not use `wrangler.jsonc`.
+In a second terminal:
 
-## Included Shape
-
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-Signed-in visitors receive both `oai-authenticated-user-id` and `oai-authenticated-user-email`. Private Sites require every visitor to sign in; public Sites may also have anonymous visitors, for whom neither header is present.
-
-The user ID is stable for the same user on the same Site and different across Sites. Email and name are intended for display or contact purposes.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const userId = requestHeaders.get("oai-authenticated-user-id");
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+```powershell
+npm run dev:frontend
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+Open `http://localhost:5173`. The local Worker API runs at `http://localhost:8787`.
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
+Apply migrations to the local D1 simulator when needed:
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
+```powershell
+cd backend
+npx wrangler d1 migrations apply namo-jan-connect --local
+```
 
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
+## Application URLs
 
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
+| Area | Local URL | Sign-in identifier |
+|---|---|---|
+| Public citizen site | `http://localhost:5173/` | No login required |
+| Portal directory | `http://localhost:5173/dashboard` | No login required |
+| Citizen dashboard | `http://localhost:5173/citizen` | No login required |
+| Civic & Infrastructure | `http://localhost:5173/civic-infra` | `NJC-CIVIC-01` |
+| Health & Education | `http://localhost:5173/health-education` | `NJC-HEALTH-01` |
+| Law & Order | `http://localhost:5173/law-order` | `NJC-SAFETY-01` |
+| Transport & Public Services | `http://localhost:5173/transport` | `NJC-TRANSPORT-01` |
+| Employment & Welfare | `http://localhost:5173/employment-welfare` | `NJC-WELFARE-01` |
+| Administrator | `http://localhost:5173/admin` | `ADMIN_EMAIL` secret |
 
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
+`/civil-department` remains an alias for `/civic-infra`.
 
-## Useful Commands
+Portal IDs are assigned by the D1 seed migration and remain stable identifiers for routing and administration. The administrator configures a required staff email and a different password for each portal from `/admin`. Department staff sign in with that email and portal-specific password; passwords are stored only as salted PBKDF2 hashes in D1.
 
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
+## Data and privacy behavior
 
-## Learn More
+- D1 stores relational records and R2 object keys.
+- R2 stores the image bytes under complaint-specific prefixes.
+- Public tracking responses omit citizen email and phone.
+- Public gallery access is limited to resolution images.
+- Department queries are filtered by the authenticated staff member's `department_id` in the Worker.
+- Staff bearer tokens are stored as SHA-256 hashes in D1 and expire automatically.
+- Images are limited to JPG, PNG, or WEBP and the configured size limit.
 
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+## Validation
+
+```powershell
+npm test
+python -m pytest backend/tests
+python -m compileall -q backend/src
+```

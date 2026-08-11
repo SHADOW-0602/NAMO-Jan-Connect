@@ -1,0 +1,12 @@
+[project]
+name = "namo-jan-connect-worker"
+version = "1.0.0"
+description = "Cloudflare Python Worker API for NAMO Jan Connect"
+requires-python = ">=3.13"
+dependencies = ["workers-runtime-sdk"]
+
+[dependency-groups]
+dev = [
+  "workers-py",
+  "pytest>=8.4.1",
+]

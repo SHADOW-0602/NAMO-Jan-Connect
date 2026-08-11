@@ -1,0 +1,26 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "namo-jan-connect-api",
+  "main": "src/entry.py",
+  "compatibility_date": "2026-08-11",
+  "compatibility_flags": ["python_workers", "disable_python_external_sdk"],
+  "vars": {
+    "FRONTEND_URL": "http://localhost:5173",
+    "SESSION_TTL_HOURS": "12",
+    "MAX_UPLOAD_MB": "5"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "namo-jan-connect",
+      "database_id": "d4c8d3c7-9cce-4c9e-82dd-293f72f44ddb",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "UPLOADS",
+      "bucket_name": "namo-jan-connect-evidence"
+    }
+  ]
+}

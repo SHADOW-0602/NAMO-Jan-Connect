@@ -1,8 +1,14 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
 
-# dependencies
-/node_modules
-/.pnp
+# JavaScript dependencies and package-manager caches
+node_modules/
+**/node_modules/
+.npm-cache/
+.pnp
 .pnp.*
 .yarn/*
 !.yarn/patches
@@ -10,33 +16,68 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
-/coverage
+# React/Vite build output
+frontend/dist/
+frontend/*.tsbuildinfo
+dist/
+out/
 
-# next.js
-/.next/
-/.vinext/
-/out/
+# Python environments, bytecode, tests, and tooling
+.venv/
+venv/
+backend/.venv/
+backend/.worker-venv/
+.python/
+.uv-cache/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage/
 
-# misc
-.DS_Store
-*.pem
+# Local databases and uploaded files
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+backend/uploads/
 
-# debug
+# Retired framework output and local deployment artifacts
+.next/
+.vinext/
+.wrangler/
+.wrangler-config/
+.vercel/
+.openai/
+outputs/
+work/
+
+# Empty legacy source directories from the pre-migration stack
+app/
+build/
+db/
+drizzle/
+examples/
+worker/
+
+# Logs and debug output
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
-
-# vercel
-.vercel
-
-/dist/
-/.wrangler/
-/outputs/
-/work/
-/.npm-cache/
-/dev-server.*.log
+# Editor and operating-system files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo

@@ -1,2 +1,0 @@
-CREATE INDEX `idx_attachments_complaint` ON `complaint_attachments` (`complaint_id`);--> statement-breakpoint
-CREATE INDEX `idx_complaints_resolved_public` ON `complaints` (`status`,`resolved_at`) WHERE "complaints"."status" = 'resolved';
