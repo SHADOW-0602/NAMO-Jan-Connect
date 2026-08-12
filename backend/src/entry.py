@@ -163,7 +163,8 @@ async def complaint_get(env, request, query: dict[str, list[str]]) -> Response:
         item.pop("citizenEmail", None); item.pop("citizenPhone", None)
         return json_response(env, item)
     if scope == "gallery":
-        origin = f"{urlparse(request.url).scheme}://{urlparse(request.url).netloc}"
+        parsed_url = urlparse(str(request.url))
+        origin = f"{parsed_url.scheme}://{parsed_url.netloc}"
         rows = await db_all(env.DB, """SELECT c.id, c.tracking_id AS trackingId, c.title, c.location_text AS location,
             c.category, c.resolved_at AS resolvedAt, d.name AS department, a.object_key AS objectKey
             FROM complaints c JOIN departments d ON d.id=c.department_id

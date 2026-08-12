@@ -5,7 +5,7 @@
   "compatibility_date": "2026-08-11",
   "compatibility_flags": ["python_workers", "disable_python_external_sdk", "global_fetch_strictly_public"],
   "vars": {
-    "FRONTEND_URL": "http://localhost:5173,https://namo-jan-connect.pages.dev,https://namo-jan-connect-h50zdu4tn-kushagras-projects-efd64c42.vercel.app",
+    "FRONTEND_URL": "http://localhost:5173,https://namo-jan-connect.pages.dev,https://namo-jan-connect.vercel.app,https://namo-jan-connect-h50zdu4tn-kushagras-projects-efd64c42.vercel.app",
     "SESSION_TTL_HOURS": "12",
     "MAX_UPLOAD_MB": "5"
   },

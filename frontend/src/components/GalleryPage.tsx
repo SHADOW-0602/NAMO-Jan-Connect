@@ -14,60 +14,6 @@ type GalleryItem = {
   imageUrl: string;
 };
 
-// Static showcase entries with real generated images
-const SHOWCASE: GalleryItem[] = [
-  {
-    id: -1,
-    trackingId: "NJC-2026-000122",
-    title: "Streetlight repaired near community park",
-    location: "Sector 14, Community Park Road",
-    category: "civic_infra",
-    department: "Civic & Infrastructure",
-    resolvedAt: new Date(Date.now() - 4 * 3600000).toISOString(),
-    imageUrl: "/gallery/fixed_streetlight.png",
-  },
-  {
-    id: -2,
-    trackingId: "NJC-2026-000123",
-    title: "Potholes filled and road repaved",
-    location: "Central Avenue Road, Block C",
-    category: "civic_infra",
-    department: "Civic & Infrastructure",
-    resolvedAt: new Date(Date.now() - 86400000).toISOString(),
-    imageUrl: "/gallery/repaired_road.png",
-  },
-  {
-    id: -3,
-    trackingId: "NJC-2026-000125",
-    title: "Drinking water cooler repaired at school",
-    location: "Government Senior Secondary School, Primary Wing",
-    category: "health_edu",
-    department: "Health & Education",
-    resolvedAt: new Date(Date.now() - 86400000).toISOString(),
-    imageUrl: "/gallery/repaired_cooler.png",
-  },
-  {
-    id: -4,
-    trackingId: "NJC-2026-000089",
-    title: "Drainage channel cleared of debris",
-    location: "Main Market Road, Block B",
-    category: "civic_infra",
-    department: "Civic & Infrastructure",
-    resolvedAt: new Date(Date.now() - 2 * 86400000).toISOString(),
-    imageUrl: "/gallery/clean_drain.png",
-  },
-  {
-    id: -5,
-    trackingId: "NJC-2026-000077",
-    title: "Park benches repainted and path restored",
-    location: "Nehru Public Gardens, East Wing",
-    category: "civic_infra",
-    department: "Civic & Infrastructure",
-    resolvedAt: new Date(Date.now() - 3 * 86400000).toISOString(),
-    imageUrl: "/gallery/repainted_park.png",
-  },
-];
-
 const CATEGORY_LABELS: Record<string, string> = {
   civic_infra: "Civic & Infrastructure",
   health_edu: "Health & Education",
@@ -91,11 +37,8 @@ export default function GalleryPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  // Merge: API items first, then showcase items not duplicated by tracking ID
-  const apiIds = new Set(apiItems.map((i) => i.trackingId));
-  const merged = [...apiItems, ...SHOWCASE.filter((s) => !apiIds.has(s.trackingId))];
-  const categories = [...new Set(merged.map((i) => i.category))];
-  const displayed = filter === ALL_FILTER ? merged : merged.filter((i) => i.category === filter);
+  const categories = [...new Set(apiItems.map((item) => item.category))];
+  const displayed = filter === ALL_FILTER ? apiItems : apiItems.filter((item) => item.category === filter);
 
   const fmt = (iso: string) =>
     new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(new Date(iso));
@@ -126,7 +69,7 @@ export default function GalleryPage() {
           Complaints <em>resolved</em>,<br />evidence <em>published</em>
         </h1>
         <p>
-          Every card below shows a real civic issue closed with verified photo proof. No fabricated success stories — only department-submitted resolution evidence.
+          Every card below comes directly from a resolved complaint with department-submitted photo proof.
         </p>
       </section>
 
@@ -239,10 +182,9 @@ export default function GalleryPage() {
       <div style={{ background: "var(--ink)", color: "white", padding: "70px clamp(24px,8vw,128px)" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "40px", maxWidth: "900px" }}>
           {[
-            ["3,200+", "Resolved cases published"],
-            ["5", "Department portals"],
-            ["94%", "Resolved within SLA"],
-            ["48h", "Average resolution time"],
+            [String(apiItems.length), "Resolved cases published"],
+            [String(categories.length), "Departments with published evidence"],
+            [loading ? "…" : "Live", "Data source"],
           ].map(([stat, label]) => (
             <div key={label}>
               <b style={{ display: "block", fontFamily: "var(--font-display, Georgia)", fontSize: "42px", fontWeight: 500, letterSpacing: "-.03em" }}>{stat}</b>

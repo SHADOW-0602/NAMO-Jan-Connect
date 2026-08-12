@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react";
 import ThemeToggle from "./ThemeToggle";
-import { IconSearch, IconShield, IconBolt, IconBarChart, IconArrowRight } from "./Icons";
+import { IconSearch, IconShield, IconBolt, IconBarChart } from "./Icons";
+import { apiFetch, readJson } from "../api";
 
 const values = [
   {
@@ -32,15 +34,14 @@ const departments = [
   { label: "Employment & Welfare", tag: "Social support, pensions, jobs", color: "#6aa361" },
 ];
 
-const timeline = [
-  { year: "2023", event: "Platform concept approved by the district administration" },
-  { year: "2024 Q1", event: "Alpha deployment across 3 pilot districts in Rajasthan" },
-  { year: "2024 Q3", event: "Department SLA dashboard rolled out — first public data published" },
-  { year: "2025", event: "Resolved gallery launched — 3,200+ verified closures published" },
-  { year: "2026", event: "National rollout begins — full department scope active" },
-];
-
 export default function AboutPage() {
+  const [stats, setStats] = useState({ total: 0, resolved: 0, active: 0 });
+  useEffect(() => {
+    apiFetch("/api/complaints?scope=stats")
+      .then((response) => response.ok ? readJson<{ summary: { total: number; resolved: number; active: number } }>(response) : Promise.reject())
+      .then((data) => setStats({ total: Number(data.summary.total), resolved: Number(data.summary.resolved), active: Number(data.summary.active) }))
+      .catch(() => setStats({ total: 0, resolved: 0, active: 0 }));
+  }, []);
   return (
     <div className="info-shell">
       {/* Header */}
@@ -89,9 +90,9 @@ export default function AboutPage() {
               </div>
               <div className="values-list" style={{ marginTop: "24px" }}>
                 {[
-                  ["12,400+", "Complaints filed"],
-                  ["94%", "Resolved within SLA"],
-                  ["3,200+", "Evidence photos published"],
+                  [stats.total.toLocaleString("en-IN"), "Complaints filed"],
+                  [stats.resolved.toLocaleString("en-IN"), "Complaints resolved"],
+                  [stats.active.toLocaleString("en-IN"), "Active complaints"],
                   ["5", "Department portals active"],
                 ].map(([stat, label]) => (
                   <article key={label} style={{ padding: "20px 22px" }}>
@@ -152,27 +153,6 @@ export default function AboutPage() {
           ))}
         </div>
       </div>
-
-      {/* Timeline */}
-      <section className="info-section reveal-on-view">
-        <div className="info-section-heading">
-          <p className="eyebrow">MILESTONES</p>
-          <h2>A brief history</h2>
-        </div>
-        <div className="process-list" style={{ maxWidth: "860px" }}>
-          {timeline.map((t) => (
-            <article key={t.year}>
-              <span style={{ fontFamily: "var(--font-mono), monospace", fontSize: "11px", color: "var(--orange)", whiteSpace: "nowrap" }}>{t.year}</span>
-              <div>
-                <p style={{ fontSize: "14px", color: "var(--ink)", fontWeight: 600 }}>{t.event}</p>
-              </div>
-              <i style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <IconArrowRight size={16} color="var(--orange)" />
-              </i>
-            </article>
-          ))}
-        </div>
-      </section>
 
       {/* CTA */}
       <section className="info-cta reveal-on-view">

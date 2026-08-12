@@ -73,6 +73,8 @@ The Worker allows local development and the deployed Cloudflare Pages/Vercel ori
 
 The React frontend also includes `frontend/vercel.json` for Vite builds and SPA routing on Vercel. Deploy it with `npm run deploy:vercel`; the FastAPI Worker, D1 database, R2 bucket, and gallery media remain on Cloudflare.
 
+Production frontend: `https://namo-jan-connect.vercel.app`
+
 ## Local development
 
 Wrangler provides local D1 and R2 simulations under `.wrangler/`; production data is not modified during ordinary local development.
