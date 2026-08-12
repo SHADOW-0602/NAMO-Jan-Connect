@@ -7,18 +7,18 @@ A Cloudflare-native complaint-management platform with anonymous citizen reporti
 | Layer | Cloudflare service | Purpose |
 |---|---|---|
 | Frontend | Pages | React 19 + Vite single-page application |
-| API | Python Workers | Authentication, complaint routing, tracking, and administration |
+| API | FastAPI on Python Workers | Typed HTTP routing, authentication, complaint routing, tracking, and administration |
 | Relational data | D1 | Citizens, departments, complaints, history, sessions, and contact records |
 | Object storage | R2 Standard | Complaint evidence and department resolution photographs |
 
 No application data is written to local SQLite, PostgreSQL, or a local uploads folder. The Worker accesses D1 and R2 through native bindings; no database passwords or R2 access keys are exposed to the application.
 
-Python Workers are currently a Cloudflare beta feature. The implementation uses the required `python_workers` compatibility flag.
+Python Workers are currently a Cloudflare beta feature. The implementation uses the required `python_workers` compatibility flag and Cloudflare's ASGI adapter to run FastAPI. Interactive API documentation is available at `/docs` and the OpenAPI schema at `/openapi.json`.
 
 ## Repository layout
 
 - `frontend/` - React, Vite, Pages configuration, and SPA redirects.
-- `backend/src/` - Python Worker API.
+- `backend/src/` - FastAPI application and Python Worker ASGI entry point.
 - `backend/migrations/` - D1 schema and initial department portal records.
 - `backend/wrangler.jsonc` - Worker, D1, and R2 binding configuration.
 - `.env.example` - local frontend values and required Worker secret names.
@@ -67,7 +67,11 @@ uv run pywrangler deploy
 npm run deploy:frontend
 ```
 
-In the deployed Worker, change `FRONTEND_URL` from localhost to the final Pages or custom-domain URL so CORS allows the production frontend.
+The Worker allows local development and the deployed Cloudflare Pages/Vercel origins through the comma-separated `FRONTEND_URL` setting.
+
+### Vercel frontend deployment
+
+The React frontend also includes `frontend/vercel.json` for Vite builds and SPA routing on Vercel. Deploy it with `npm run deploy:vercel`; the FastAPI Worker, D1 database, R2 bucket, and gallery media remain on Cloudflare.
 
 ## Local development
 

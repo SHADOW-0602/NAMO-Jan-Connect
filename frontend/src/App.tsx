@@ -3,6 +3,7 @@ import NamoApp from "./components/NamoApp";
 import HowItWorksPage from "./components/HowItWorksPage";
 import AboutPage from "./components/AboutPage";
 import GalleryPage from "./components/GalleryPage";
+import { apiFetch, readJson } from "./api";
 
 type Portal = "admin" | "department";
 type Session = { access_token: string; role: string; name: string; department_category?: string | null };
@@ -25,13 +26,11 @@ const departmentPaths: Record<string, { category: string; label: string }> = {
   "/employment-welfare": { category: "employment_welfare", label: "Employment & Welfare" },
 };
 
-function api(path: string) { return `${globalThis.__NJC_API_URL__ || ""}${path}`; }
-
 function StaffLogin({ portal, departmentCategory, departmentLabel, children }: { portal: Portal; departmentCategory?: string; departmentLabel?: string; children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(() => { try { return JSON.parse(localStorage.getItem("njc_staff_session") || "null"); } catch { return null; } });
   const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
   useEffect(() => { if (session) localStorage.setItem("njc_staff_session", JSON.stringify(session)); }, [session]);
-  async function login(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setBusy(true); setError(""); const data = new FormData(event.currentTarget); try { const response = await fetch(api("/api/auth/login"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ identifier: data.get("identifier"), password: data.get("password") }) }); const result = await response.json(); if (!response.ok) throw new Error(result.detail || "Sign-in failed"); if (portal === "admin" && result.role !== "admin") throw new Error("Administrator credentials required"); if (portal === "department") { if (!["department_staff", "admin"].includes(result.role)) throw new Error("Department credentials required"); if (result.role !== "admin" && departmentCategory && result.department_category !== departmentCategory) { throw new Error(`This account does not have access to the ${departmentLabel || "requested"} portal.`); } } setSession(result); } catch (caught) { setError(caught instanceof Error ? caught.message : "Sign-in failed"); } finally { setBusy(false); } }
+  async function login(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setBusy(true); setError(""); const data = new FormData(event.currentTarget); try { const response = await apiFetch("/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ identifier: data.get("identifier"), password: data.get("password") }) }); const result = await readJson<Session & { detail?: string }>(response); if (!response.ok) throw new Error(result.detail || "Sign-in failed"); if (portal === "admin" && result.role !== "admin") throw new Error("Administrator credentials required"); if (portal === "department") { if (!["department_staff", "admin"].includes(result.role)) throw new Error("Department credentials required"); if (result.role !== "admin" && departmentCategory && result.department_category !== departmentCategory) { throw new Error(`This account does not have access to the ${departmentLabel || "requested"} portal.`); } } setSession(result); } catch (caught) { setError(caught instanceof Error ? caught.message : "Sign-in failed"); } finally { setBusy(false); } }
   if (session) return <>{children}<button className="staff-logout" onClick={() => { localStorage.removeItem("njc_staff_session"); setSession(null); }}>Sign out</button></>;
   return <main className="access-denied"><form className="staff-login" onSubmit={login}><p className="eyebrow">SECURE STAFF PORTAL</p><h1>{portal === "admin" ? "Administrator sign in" : `${departmentLabel} sign in`}</h1><p>{portal === "admin" ? "Use the single administrator email." : `Use the staff email and unique password assigned to the ${departmentLabel} portal.`}</p><label>{portal === "admin" ? "Administrator email" : "Department staff email"}<input name="identifier" type="email" required autoComplete="username" /></label><label>Password<input name="password" type="password" required autoComplete="current-password" /></label>{error && <p className="form-error">{error}</p>}<button className="btn btn-primary" disabled={busy}>{busy ? "Signing in..." : "Sign in"}</button><a href="/">Return to public site</a></form></main>;
 }

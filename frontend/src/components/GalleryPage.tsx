@@ -1,11 +1,7 @@
 import { useEffect, useState } from "react";
 import ThemeToggle from "./ThemeToggle";
 import { IconLock, IconCheck } from "./Icons";
-
-function apiFetch(input: string) {
-  const base = (globalThis as typeof globalThis & { __NJC_API_URL__?: string }).__NJC_API_URL__ || "";
-  return globalThis.fetch(`${base}${input}`);
-}
+import { apiFetch, readJson } from "../api";
 
 type GalleryItem = {
   id: number;
@@ -89,7 +85,7 @@ export default function GalleryPage() {
 
   useEffect(() => {
     apiFetch("/api/complaints?scope=gallery")
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((r) => (r.ok ? readJson<{ items?: GalleryItem[] }>(r) : Promise.reject()))
       .then((data) => setApiItems(data.items ?? []))
       .catch(() => setApiItems([]))
       .finally(() => setLoading(false));

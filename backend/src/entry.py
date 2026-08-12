@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import hmac
-import json
 import secrets
 import uuid
-from urllib.parse import parse_qs, quote, unquote, urlparse
+from urllib.parse import quote, unquote, urlparse
 
-from workers import Response, WorkerEntrypoint
+import asgi
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, Response
+from workers import WorkerEntrypoint
 
 from domain import CATEGORIES, TRANSITIONS, image_extension, iso_now, make_password_hash, normalize_phone, session_expiry, sla_expiry, token_hash, valid_email, verify_password
 
@@ -50,9 +52,11 @@ def env_text(env, name: str, default: str = "") -> str:
     return str(value) if value is not None else default
 
 
-def cors_headers(env) -> dict[str, str]:
+def cors_headers(env, request_origin: str = "") -> dict[str, str]:
+    allowed_origins = [item.strip() for item in env_text(env, "FRONTEND_URL", "http://localhost:5173").split(",") if item.strip()]
+    allowed_origin = request_origin if request_origin in allowed_origins else allowed_origins[0]
     return {
-        "access-control-allow-origin": env_text(env, "FRONTEND_URL", "http://localhost:5173"),
+        "access-control-allow-origin": allowed_origin,
         "access-control-allow-methods": "GET, POST, PATCH, OPTIONS",
         "access-control-allow-headers": "Authorization, Content-Type",
         "access-control-max-age": "86400",
@@ -60,10 +64,9 @@ def cors_headers(env) -> dict[str, str]:
     }
 
 
-def json_response(env, payload, status: int = 200) -> Response:
+def json_response(env, payload, status: int = 200) -> JSONResponse:
     headers = cors_headers(env)
-    headers["content-type"] = "application/json; charset=utf-8"
-    return Response(json.dumps(payload, separators=(",", ":"), default=str), status=status, headers=headers)
+    return JSONResponse(payload, status_code=status, headers=headers)
 
 
 def error_response(env, error: ApiError) -> Response:
@@ -112,7 +115,7 @@ JOIN users u ON u.id=c.citizen_id
 
 async def authenticate(env, request) -> Response:
     try:
-        body = json.loads(await request.text())
+        body = await request.json()
     except Exception as exc:
         raise ApiError(400, "Invalid JSON request") from exc
     identifier = str(body.get("identifier", "")).strip().lower()
@@ -186,21 +189,22 @@ async def complaint_get(env, request, query: dict[str, list[str]]) -> Response:
 
 
 async def store_image(env, file, prefix: str) -> tuple[str, str]:
-    content_type = str(getattr(file, "type", ""))
+    content_type = str(getattr(file, "content_type", ""))
     try:
         extension = image_extension(content_type)
     except ValueError as exc:
         raise ApiError(422, str(exc)) from exc
     max_bytes = int(env_text(env, "MAX_UPLOAD_MB", "5")) * 1024 * 1024
-    if int(getattr(file, "size", 0)) > max_bytes:
+    contents = await file.read()
+    if len(contents) > max_bytes:
         raise ApiError(422, f"Image exceeds the {env_text(env, 'MAX_UPLOAD_MB', '5')} MB limit")
     key = f"{prefix.strip('/')}/{uuid.uuid4().hex}{extension}"
-    await env.UPLOADS.put(key, file.stream(), httpMetadata={"contentType": content_type, "cacheControl": "public, max-age=31536000, immutable"})
+    await env.UPLOADS.put(key, contents, httpMetadata={"contentType": content_type, "cacheControl": "public, max-age=31536000, immutable"})
     return key, content_type
 
 
 async def complaint_create(env, request) -> Response:
-    form = await request.formData()
+    form = await request.form()
     name = str(form.get("citizenName") or "").strip()
     email = str(form.get("citizenEmail") or "").strip().lower()
     try: phone = normalize_phone(str(form.get("citizenPhone") or ""))
@@ -223,8 +227,8 @@ async def complaint_create(env, request) -> Response:
     tracking_id = f"NJC-{now[:4]}-{complaint_id:06d}"
     await db_run(env.DB, "UPDATE complaints SET tracking_id=? WHERE id=?", tracking_id, complaint_id)
     await db_run(env.DB, "INSERT INTO status_history (complaint_id,old_status,new_status,remarks,changed_by,changed_at) VALUES (?,NULL,'submitted',?,?,?)", complaint_id, f"Complaint received and routed to {department['name']}.", citizen["id"], now)
-    for file in as_list(form.getAll("evidence"))[:4]:
-        if int(getattr(file, "size", 0)) <= 0: continue
+    for file in form.getlist("evidence")[:4]:
+        if not getattr(file, "filename", ""): continue
         key, content_type = await store_image(env, file, f"complaints/{complaint_id}/evidence")
         await db_run(env.DB, "INSERT INTO complaint_attachments (complaint_id,object_key,file_type,content_type,uploaded_by,uploaded_at) VALUES (?,?,'evidence_image',?,?,?)", complaint_id, key, content_type, citizen["id"], now)
     return json_response(env, {"ok": True, "trackingId": tracking_id, "department": department["name"]}, 201)
@@ -235,7 +239,7 @@ async def complaint_patch(env, request) -> Response:
     content_type = str(request.headers.get("content-type") or "")
     if "application/json" in content_type:
         admin = require_role(user, "admin")
-        body = json.loads(await request.text())
+        body = await request.json()
         if body.get("action") != "assign_department" or not body.get("departmentId"): raise ApiError(400, "Invalid admin action")
         staff_email = str(body.get("staffEmail") or "").strip().lower()
         password = str(body.get("password") or "")
@@ -247,7 +251,7 @@ async def complaint_patch(env, request) -> Response:
         await db_run(env.DB, "DELETE FROM staff_sessions WHERE user_id IN (SELECT id FROM users WHERE role='department_staff' AND department_id=?)", department_id)
         return json_response(env, {"ok": True, "changedBy": admin["name"]})
     actor = require_role(user, "department_staff", "admin")
-    form = await request.formData()
+    form = await request.form()
     complaint_id = int(str(form.get("complaintId") or "0"))
     new_status = str(form.get("status") or "")
     remarks = str(form.get("remarks") or "").strip()
@@ -259,14 +263,14 @@ async def complaint_patch(env, request) -> Response:
     await db_run(env.DB, "UPDATE complaints SET status=?,updated_at=?,resolved_at=? WHERE id=?", new_status, now, resolved_at, complaint_id)
     await db_run(env.DB, "INSERT INTO status_history (complaint_id,old_status,new_status,remarks,changed_by,changed_at) VALUES (?,?,?,?,?,?)", complaint_id, item["status"], new_status, remarks, actor["id"], now)
     photo = form.get("resolutionPhoto")
-    if new_status == "resolved" and photo is not None and int(getattr(photo, "size", 0)) > 0:
+    if new_status == "resolved" and photo is not None and getattr(photo, "filename", ""):
         key, photo_type = await store_image(env, photo, f"complaints/{complaint_id}/resolution")
         await db_run(env.DB, "INSERT INTO complaint_attachments (complaint_id,object_key,file_type,content_type,uploaded_by,uploaded_at) VALUES (?,?,'resolution_image',?,?,?)", complaint_id, key, photo_type, actor["id"], now)
     return json_response(env, {"ok": True})
 
 
 async def contact_create(env, request) -> Response:
-    body = json.loads(await request.text())
+    body = await request.json()
     name = str(body.get("name", "")).strip(); email = str(body.get("email", "")).strip().lower(); message = str(body.get("message", "")).strip()
     if len(name) < 2 or not valid_email(email) or len(message) < 10: raise ApiError(422, "Complete all contact fields")
     result = await db_run(env.DB, "INSERT INTO contact_messages (name,email,topic,tracking_id,message,status,created_at) VALUES (?,?,?,?,?,'new',?)", name, email, str(body.get("topic", "Support")), body.get("trackingId"), message, iso_now())
@@ -279,24 +283,74 @@ async def serve_upload(env, encoded_key: str) -> Response:
     obj = await env.UPLOADS.get(key)
     if obj is None: raise ApiError(404, "File not found")
     headers = {"content-type": str(getattr(obj.httpMetadata, "contentType", "application/octet-stream")), "cache-control": "public, max-age=3600", "etag": str(obj.httpEtag)}
-    return Response(obj.body, headers=headers)
+    content = bytes(as_python(await obj.arrayBuffer()))
+    return Response(content=content, headers=headers)
+
+
+app = FastAPI(
+    title="NAMO Jan Connect API",
+    version="1.0.0",
+    description="Complaint routing, department portals, administration, D1 records, and R2 evidence.",
+)
+
+
+@app.middleware("http")
+async def add_cors_headers(request: Request, call_next):
+    if request.method == "OPTIONS":
+        return Response(status_code=204, headers=cors_headers(request.scope["env"], request.headers.get("origin", "")))
+    response = await call_next(request)
+    for name, value in cors_headers(request.scope["env"], request.headers.get("origin", "")).items():
+        response.headers[name] = value
+    return response
+
+
+@app.exception_handler(ApiError)
+async def api_error_handler(request: Request, error: ApiError):
+    return error_response(request.scope["env"], error)
+
+
+@app.get("/api/health", tags=["System"])
+async def health(request: Request):
+    return json_response(request.scope["env"], {"status": "ok", "framework": "FastAPI", "database": "D1", "uploads": "R2"})
+
+
+@app.post("/api/auth/login", tags=["Authentication"])
+async def login(request: Request):
+    return await authenticate(request.scope["env"], request)
+
+
+@app.get("/api/auth/me", tags=["Authentication"])
+async def auth_me(request: Request):
+    env = request.scope["env"]
+    return json_response(env, require_role(await current_user(env, request), "admin", "department_staff"))
+
+
+@app.get("/api/complaints", tags=["Complaints"])
+async def get_complaints(request: Request):
+    query = {key: request.query_params.getlist(key) for key in request.query_params.keys()}
+    return await complaint_get(request.scope["env"], request, query)
+
+
+@app.post("/api/complaints", tags=["Complaints"])
+async def create_complaint(request: Request):
+    return await complaint_create(request.scope["env"], request)
+
+
+@app.patch("/api/complaints", tags=["Complaints"])
+async def update_complaint(request: Request):
+    return await complaint_patch(request.scope["env"], request)
+
+
+@app.post("/api/contact", tags=["Support"])
+async def create_contact(request: Request):
+    return await contact_create(request.scope["env"], request)
+
+
+@app.get("/api/uploads/{encoded_key:path}", tags=["Uploads"])
+async def get_upload(request: Request, encoded_key: str):
+    return await serve_upload(request.scope["env"], encoded_key)
 
 
 class Default(WorkerEntrypoint):
     async def fetch(self, request):
-        if request.method == "OPTIONS": return Response(None, status=204, headers=cors_headers(self.env))
-        parsed = urlparse(request.url); path = parsed.path; query = parse_qs(parsed.query)
-        try:
-            if path == "/api/health" and request.method == "GET": return json_response(self.env, {"status": "ok", "database": "D1", "uploads": "R2"})
-            if path == "/api/auth/login" and request.method == "POST": return await authenticate(self.env, request)
-            if path == "/api/auth/me" and request.method == "GET": return json_response(self.env, require_role(await current_user(self.env, request), "admin", "department_staff"))
-            if path == "/api/complaints" and request.method == "GET": return await complaint_get(self.env, request, query)
-            if path == "/api/complaints" and request.method == "POST": return await complaint_create(self.env, request)
-            if path == "/api/complaints" and request.method == "PATCH": return await complaint_patch(self.env, request)
-            if path == "/api/contact" and request.method == "POST": return await contact_create(self.env, request)
-            if path.startswith("/api/uploads/") and request.method == "GET": return await serve_upload(self.env, path.removeprefix("/api/uploads/"))
-            raise ApiError(404, "Route not found")
-        except ApiError as error:
-            return error_response(self.env, error)
-        except Exception:
-            return error_response(self.env, ApiError(500, "Unexpected service error"))
+        return await asgi.fetch(app, request, self.env)

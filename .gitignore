@@ -2,12 +2,19 @@
 .env
 .env.*
 !.env.example
+!**/.env.example
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
 *.pem
 
 # JavaScript dependencies and package-manager caches
 node_modules/
 **/node_modules/
 .npm-cache/
+.cache/
+.parcel-cache/
+.turbo/
 .pnp
 .pnp.*
 .yarn/*
@@ -19,20 +26,28 @@ node_modules/
 # React/Vite build output
 frontend/dist/
 frontend/*.tsbuildinfo
+*.tsbuildinfo
+vite.config.*.timestamp-*
 dist/
 out/
 
 # Python environments, bytecode, tests, and tooling
 .venv/
+.venv*/
 venv/
 backend/.venv/
 backend/.worker-venv/
+backend/.fastapi-venv/
+backend/.uv-venv/
+backend/python_modules/
 .python/
 .uv-cache/
 __pycache__/
 **/__pycache__/
 *.py[cod]
 *.pyd
+*.egg-info/
+.eggs/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -55,6 +70,7 @@ backend/uploads/
 .wrangler/
 .wrangler-config/
 .vercel/
+.vercel/cache/
 .openai/
 outputs/
 work/

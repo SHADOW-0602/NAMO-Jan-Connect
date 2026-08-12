@@ -18,7 +18,7 @@ test("builds the Cloudflare Pages React application", async () => {
   assert.match(config, /pages_build_output_dir/);
 });
 
-test("uses a Python Worker with native D1 and R2 bindings", async () => {
+test("uses FastAPI on a Python Worker with native D1 and R2 bindings", async () => {
   const [entry, workerConfig, migration, pyproject] = await Promise.all([
     readFile(new URL("backend/src/entry.py", root), "utf8"),
     readFile(new URL("backend/wrangler.jsonc", root), "utf8"),
@@ -26,6 +26,9 @@ test("uses a Python Worker with native D1 and R2 bindings", async () => {
     readFile(new URL("backend/pyproject.toml", root), "utf8"),
   ]);
   assert.match(entry, /class Default\(WorkerEntrypoint\)/);
+  assert.match(entry, /app = FastAPI/);
+  assert.match(entry, /asgi\.fetch\(app, request, self\.env\)/);
+  assert.match(pyproject, /fastapi/);
   assert.match(entry, /db\.prepare\(sql\)/);
   assert.match(entry, /env\.UPLOADS\.put/);
   assert.match(workerConfig, /python_workers/);
