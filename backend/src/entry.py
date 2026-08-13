@@ -11,6 +11,8 @@ from fastapi.responses import JSONResponse, Response
 from workers import WorkerEntrypoint
 
 from domain import CATEGORIES, TRANSITIONS, image_extension, iso_now, make_password_hash, normalize_phone, session_expiry, sla_expiry, token_hash, valid_email, verify_password
+from email_client import send_smtp_email
+
 
 
 class ApiError(Exception):
@@ -208,31 +210,64 @@ async def complaint_create(env, request) -> Response:
     form = await request.form()
     name = str(form.get("citizenName") or "").strip()
     email = str(form.get("citizenEmail") or "").strip().lower()
+    email_val = email if email else None
     try: phone = normalize_phone(str(form.get("citizenPhone") or ""))
     except ValueError as exc: raise ApiError(422, str(exc)) from exc
     category = str(form.get("category") or "")
     title = str(form.get("title") or "").strip()
     description = str(form.get("description") or "").strip()
     location = str(form.get("location") or "").strip()
-    if len(name) < 2 or not valid_email(email): raise ApiError(422, "Provide a valid name and email")
+    if len(name) < 2: raise ApiError(422, "Provide a valid name")
+    if email_val and not valid_email(email_val): raise ApiError(422, "Provide a valid email")
     if category not in CATEGORIES or len(title) < 6 or len(description) < 20 or not location: raise ApiError(422, "Complete all complaint details")
-    recent = await db_first(env.DB, "SELECT COUNT(*) AS total FROM complaints c JOIN users u ON u.id=c.citizen_id WHERE lower(u.email)=? AND c.created_at >= datetime('now','-1 day')", email)
+    if email_val:
+        recent = await db_first(env.DB, "SELECT COUNT(*) AS total FROM complaints c JOIN users u ON u.id=c.citizen_id WHERE lower(u.email)=? AND c.created_at >= datetime('now','-1 day')", email_val)
+    else:
+        recent = await db_first(env.DB, "SELECT COUNT(*) AS total FROM complaints c JOIN users u ON u.id=c.citizen_id WHERE u.phone=? AND c.created_at >= datetime('now','-1 day')", phone)
     if recent and int(recent["total"]) >= 10: raise ApiError(429, "Daily complaint limit reached")
     now = iso_now()
-    await db_run(env.DB, "INSERT INTO users (name,email,phone,role,created_at) VALUES (?,?,?,'citizen',?) ON CONFLICT(email) DO UPDATE SET name=excluded.name, phone=excluded.phone", name, email, phone, now)
-    citizen = await db_first(env.DB, "SELECT id FROM users WHERE email=?", email)
+    if email_val:
+        await db_run(env.DB, "INSERT INTO users (name,email,phone,role,created_at) VALUES (?,?,?,'citizen',?) ON CONFLICT(email) DO UPDATE SET name=excluded.name, phone=excluded.phone", name, email_val, phone, now)
+        citizen = await db_first(env.DB, "SELECT id FROM users WHERE email=?", email_val)
+        citizen_id = citizen["id"]
+    else:
+        res = await db_run(env.DB, "INSERT INTO users (name,email,phone,role,created_at) VALUES (?,NULL,?,'citizen',?)", name, phone, now)
+        citizen_id = int(res.meta.last_row_id)
     department = await db_first(env.DB, "SELECT id,name,sla_days AS sla FROM departments WHERE category=?", category)
     result = await db_run(env.DB, """INSERT INTO complaints (tracking_id,citizen_id,category,department_id,title,description,location_text,latitude,longitude,status,priority,created_at,updated_at,sla_due_at)
-        VALUES (?,?,?,?,?,?,?,?,?,'submitted','medium',?,?,?)""", f"pending-{uuid.uuid4().hex}", citizen["id"], category, department["id"], title, description, location, form.get("latitude") or None, form.get("longitude") or None, now, now, sla_expiry(int(department["sla"])))
+        VALUES (?,?,?,?,?,?,?,?,?,'submitted','medium',?,?,?)""", f"pending-{uuid.uuid4().hex}", citizen_id, category, department["id"], title, description, location, form.get("latitude") or None, form.get("longitude") or None, now, now, sla_expiry(int(department["sla"])))
     complaint_id = int(result.meta.last_row_id)
     tracking_id = f"NJC-{now[:4]}-{complaint_id:06d}"
     await db_run(env.DB, "UPDATE complaints SET tracking_id=? WHERE id=?", tracking_id, complaint_id)
-    await db_run(env.DB, "INSERT INTO status_history (complaint_id,old_status,new_status,remarks,changed_by,changed_at) VALUES (?,NULL,'submitted',?,?,?)", complaint_id, f"Complaint received and routed to {department['name']}.", citizen["id"], now)
+    await db_run(env.DB, "INSERT INTO status_history (complaint_id,old_status,new_status,remarks,changed_by,changed_at) VALUES (?,NULL,'submitted',?,?,?)", complaint_id, f"Complaint received and routed to {department['name']}.", citizen_id, now)
     for file in form.getlist("evidence")[:4]:
         if not getattr(file, "filename", ""): continue
         key, content_type = await store_image(env, file, f"complaints/{complaint_id}/evidence")
-        await db_run(env.DB, "INSERT INTO complaint_attachments (complaint_id,object_key,file_type,content_type,uploaded_by,uploaded_at) VALUES (?,?,'evidence_image',?,?,?)", complaint_id, key, content_type, citizen["id"], now)
+        await db_run(env.DB, "INSERT INTO complaint_attachments (complaint_id,object_key,file_type,content_type,uploaded_by,uploaded_at) VALUES (?,?,'evidence_image',?,?,?)", complaint_id, key, content_type, citizen_id, now)
+    
+    if email_val:
+        subject = f"Complaint Filed Successfully - {tracking_id}"
+        category_name = CATEGORIES.get(category, {}).get("name", category)
+        body = (
+            f"Dear {name},\n\n"
+            f"Your complaint has been filed successfully on NAMO Jan Connect.\n\n"
+            f"Tracking ID: {tracking_id}\n"
+            f"Title: {title}\n"
+            f"Category: {category_name}\n"
+            f"Department: {department['name']}\n"
+            f"Description: {description}\n\n"
+            f"You can track the progress of your complaint here:\n"
+            f"{env_text(env, 'FRONTEND_URL', 'http://localhost:5173').split(',')[0]}/citizen?tracking={tracking_id}\n\n"
+            f"Regards,\n"
+            f"NAMO Jan Connect Administration"
+        )
+        try:
+            await send_smtp_email(env, email_val, subject, body)
+        except Exception as e:
+            print(f"Failed to send filing email: {e}")
+            
     return json_response(env, {"ok": True, "trackingId": tracking_id, "department": department["name"]}, 201)
+
 
 
 async def complaint_patch(env, request) -> Response:
@@ -267,6 +302,38 @@ async def complaint_patch(env, request) -> Response:
     if new_status == "resolved" and photo is not None and getattr(photo, "filename", ""):
         key, photo_type = await store_image(env, photo, f"complaints/{complaint_id}/resolution")
         await db_run(env.DB, "INSERT INTO complaint_attachments (complaint_id,object_key,file_type,content_type,uploaded_by,uploaded_at) VALUES (?,?,'resolution_image',?,?,?)", complaint_id, key, photo_type, actor["id"], now)
+    
+    info = await db_first(env.DB, """
+        SELECT c.tracking_id AS trackingId, c.title, u.name, u.email
+        FROM complaints c
+        JOIN users u ON u.id = c.citizen_id
+        WHERE c.id = ?
+    """, complaint_id)
+    if info and info.get("email"):
+        status_labels = {
+            "submitted": "Submitted",
+            "acknowledged": "Acknowledged",
+            "in_progress": "In Progress",
+            "resolved": "Resolved",
+            "rejected": "Rejected",
+            "reopened": "Reopened",
+        }
+        status_label = status_labels.get(new_status, new_status.title())
+        subject = f"Complaint Status Updated - {info['trackingId']}"
+        body = (
+            f"Dear {info['name']},\n\n"
+            f"The status of your complaint '{info['title']}' has been updated to: {status_label}.\n\n"
+            f"Remarks:\n{remarks}\n\n"
+            f"You can track the live timeline here:\n"
+            f"{env_text(env, 'FRONTEND_URL', 'http://localhost:5173').split(',')[0]}/citizen?tracking={info['trackingId']}\n\n"
+            f"Regards,\n"
+            f"NAMO Jan Connect Administration"
+        )
+        try:
+            await send_smtp_email(env, str(info["email"]), subject, body)
+        except Exception as e:
+            print(f"Failed to send update email: {e}")
+
     return json_response(env, {"ok": True})
 
 
@@ -347,9 +414,20 @@ async def create_contact(request: Request):
     return await contact_create(request.scope["env"], request)
 
 
+@app.post("/api/test-email")
+async def test_email(request: Request):
+    body = await request.json()
+    email = body.get("email")
+    if not email:
+        raise ApiError(400, "email is required")
+    await send_smtp_email(request.scope["env"], email, "Test Connection", "SMTP connection works!")
+    return JSONResponse({"status": "sent"})
+
+
 @app.get("/api/uploads/{encoded_key:path}", tags=["Uploads"])
 async def get_upload(request: Request, encoded_key: str):
     return await serve_upload(request.scope["env"], encoded_key)
+
 
 
 class Default(WorkerEntrypoint):

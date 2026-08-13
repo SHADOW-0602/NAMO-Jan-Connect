@@ -48,12 +48,17 @@ cd backend
 npx wrangler d1 migrations apply namo-jan-connect --remote
 ```
 
-4. Configure encrypted staff credentials:
+4. Configure encrypted staff credentials and Gmail SMTP secrets:
 
 ```powershell
 uv run pywrangler secret put ADMIN_EMAIL
 uv run pywrangler secret put ADMIN_PASSWORD
+uv run pywrangler secret put SMTP_USER
+uv run pywrangler secret put SMTP_PASS
 ```
+
+*Note: `SMTP_USER` is the sender Gmail address and `SMTP_PASS` is the Gmail App Password.*
+
 
 5. Deploy the Python Worker:
 
@@ -120,6 +125,7 @@ Portal IDs are assigned by the D1 seed migration and remain stable identifiers f
 
 ## Data and privacy behavior
 
+- Citizen email address is optional. If provided, the platform automatically sends email updates (complaint filing confirmation and subsequent status transitions) via Gmail SMTP using Cloudflare TCP sockets.
 - D1 stores relational records and R2 object keys.
 - R2 stores the image bytes under complaint-specific prefixes.
 - Public tracking responses omit citizen email and phone.
