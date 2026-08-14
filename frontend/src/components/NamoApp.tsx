@@ -14,7 +14,7 @@ type Complaint = {
   history?: { oldStatus: string | null; newStatus: string; remarks: string; changedAt: string; changedBy: string }[];
 };
 type DepartmentAccess = { departmentId: number; department: string; category: string; portalId: string; staffEmail: string | null; passwordConfigured: number };
-type AdminSection = "overview" | "complaints" | "activity" | "analytics";
+type AdminSection = "overview" | "complaints" | "departments" | "activity" | "analytics";
 
 const categoryMeta: Record<string, { label: string; short: string; tone: string; mark: string }> = {
   civic_infra: { label: "Civic & Infrastructure", short: "Civic", tone: "amber", mark: "CI" },
@@ -96,7 +96,7 @@ export default function NamoApp({ initialPortal = "public" }: { initialPortal?: 
     {portal === "public" && <PublicHome stats={stats} onFile={() => setFileOpen(true)} onTrack={() => setTrackOpen(true)} />}
     {portal === "citizen" && <CitizenPortal complaints={complaints} onFile={() => setFileOpen(true)} onSelect={setSelected} />}
     {portal === "department" && <DepartmentPortal complaints={complaints} onSelect={setSelected} onChanged={() => loadPortal("department")} />}
-    {portal === "admin" && <AdminPortal complaints={complaints} onSelect={setSelected} stats={stats} departmentAccess={departmentAccess} />}
+    {portal === "admin" && <AdminPortal complaints={complaints} onSelect={setSelected} stats={stats} departmentAccess={departmentAccess} onChanged={() => loadPortal("admin")} />}
     {fileOpen && <ComplaintForm onClose={() => setFileOpen(false)} onCreated={(trackingId) => { setFileOpen(false); setTrackOpen(true); sessionStorage.setItem("newTrackingId", trackingId); }} />}
     {trackOpen && <TrackModal onClose={() => setTrackOpen(false)} onSelect={(complaint) => { setTrackOpen(false); setSelected(complaint); }} />}
     {selected && <ComplaintDetail complaint={selected} onClose={() => setSelected(null)} />}
@@ -154,6 +154,7 @@ function Sidebar({ portal, active = "overview", onAdminNavigate }: { portal: Por
   if (portal === "admin") {
     const items: { key: AdminSection; icon: string; label: string }[] = [
       { key: "overview", icon: "OV", label: "Overview" }, { key: "complaints", icon: "CQ", label: "Complaints" },
+      { key: "departments", icon: "DP", label: "Departments" },
       { key: "activity", icon: "AC", label: "Activity" },
       { key: "analytics", icon: "AN", label: "Analytics" },
     ];
@@ -183,11 +184,12 @@ function DepartmentPortal({ complaints, onSelect, onChanged }: { complaints: Com
   return <div className="portal-shell"><Sidebar portal="department" /><main className="workspace"><div className="workspace-heading"><div><p className="eyebrow">{label}</p><h1>Complaint queue</h1><p>Review, act, and keep citizens informed.</p></div><div className="queue-date">Resolution rate <b>{resolutionRate}%</b></div></div><div className="metric-row"><Metric label="Assigned" value={complaints.length} note="Current queue" /><Metric label="Needs attention" value={complaints.filter((item) => daysUntil(item.slaDueAt) <= 1 && item.status !== "resolved").length} note="SLA near or overdue" tone="coral" /><Metric label="In progress" value={complaints.filter((item) => item.status === "in_progress").length} note="Field work active" tone="blue" /><Metric label="Resolved total" value={complaints.filter((item) => item.status === "resolved").length} note="Live records" tone="green" /></div><section className="workspace-section"><div className="table-heading table-heading-filters"><div><h2>Assigned complaints</h2><p>Sorted by urgency and SLA.</p></div><div className="filters">{["all", "submitted", "acknowledged", "in_progress", "resolved"].map((item) => <button className={filter === item ? "active" : ""} onClick={() => setFilter(item)} key={item}>{item === "all" ? "All" : statusLabels[item]}</button>)}</div></div>{visible.length ? <div className="data-table"><div className="table-row table-labels"><span>Complaint</span><span>Citizen</span><span>Status</span><span>SLA</span><span>Action</span></div>{visible.map((complaint) => <div className="table-row" key={complaint.id}><button className="table-complaint" onClick={() => onSelect(complaint)}><CategoryBadge category={complaint.category} /><span><b>{complaint.title}</b><small>{complaint.trackingId}</small></span></button><span>{complaint.citizenName ?? "Citizen"}</span><StatusPill status={complaint.status} /><span className={daysUntil(complaint.slaDueAt) <= 1 && complaint.status !== "resolved" ? "sla-danger" : ""}>{complaint.status === "resolved" ? "Completed" : daysUntil(complaint.slaDueAt) < 0 ? `${Math.abs(daysUntil(complaint.slaDueAt))}d overdue` : `${daysUntil(complaint.slaDueAt)}d left`}</span><button className="btn btn-small" onClick={() => setUpdating(complaint)}>Update</button></div>)}</div> : <EmptyAdminState text="No real complaints are currently assigned to this department." />}</section>{updating && <UpdateModal complaint={updating} onClose={() => setUpdating(null)} onChanged={() => { setUpdating(null); onChanged(); }} />}</main></div>;
 }
 
-function AdminPortal({ complaints, onSelect, stats, departmentAccess }: { complaints: Complaint[]; onSelect: (complaint: Complaint) => void; stats: { total: number; resolved: number; active: number; avgDays: number }; departmentAccess: DepartmentAccess[] }) {
+function AdminPortal({ complaints, onSelect, stats, departmentAccess, onChanged }: { complaints: Complaint[]; onSelect: (complaint: Complaint) => void; stats: { total: number; resolved: number; active: number; avgDays: number }; departmentAccess: DepartmentAccess[]; onChanged: () => void }) {
   const [section, setSection] = useState<AdminSection>("overview");
   return <div className="portal-shell"><Sidebar portal="admin" active={section} onAdminNavigate={setSection} /><main className="workspace admin-workspace">
     {section === "overview" && <AdminOverview complaints={complaints} stats={stats} departmentAccess={departmentAccess} onSelect={onSelect} onNavigate={setSection} />}
     {section === "complaints" && <AdminComplaintQueue complaints={complaints} onSelect={onSelect} />}
+    {section === "departments" && <AdminDepartments departmentAccess={departmentAccess} onChanged={onChanged} />}
     {section === "activity" && <AdminActivity complaints={complaints} onSelect={onSelect} />}
     {section === "analytics" && <AdminAnalytics complaints={complaints} stats={stats} />}
   </main></div>;
@@ -291,3 +293,154 @@ function UpdateModal({ complaint, onClose, onChanged }: { complaint: Complaint; 
 }
 
 function Footer() { return <footer><Brand light /><div><p>Transparent public service, from first report to final resolution.</p><span>© 2026 NAMO Jan Connect</span></div><nav><a href="/how-it-works">How it works</a><a href="/about">About us</a><a href="/gallery">Solved gallery</a><a href="/privacy">Privacy</a><a href="/accessibility">Accessibility</a><a href="/contact">Contact</a></nav></footer>; }
+
+function AdminDepartments({ departmentAccess, onChanged }: { departmentAccess: DepartmentAccess[]; onChanged: () => void }) {
+  const [configuring, setConfiguring] = useState<DepartmentAccess | null>(null);
+
+  return (
+    <>
+      <AdminPageHeading
+        eyebrow="PORTAL ACCESS"
+        title="Department portals & credentials"
+        copy="Manage sign-in credentials and access configurations for municipal departments."
+      />
+      <section className="workspace-section">
+        <div className="table-heading">
+          <div>
+            <h2>Active departments</h2>
+            <p>Assign email addresses and secure passwords for department staff logins.</p>
+          </div>
+        </div>
+        {departmentAccess.length ? (
+          <div className="data-table">
+            <div className="table-row table-labels">
+              <span>Department</span>
+              <span>Portal ID</span>
+              <span>Staff Email</span>
+              <span>Password Status</span>
+              <span></span>
+            </div>
+            {departmentAccess.map((dept) => (
+              <div className="table-row" key={dept.departmentId}>
+                <span style={{ fontWeight: 600 }}>{dept.department}</span>
+                <span className="mono">{dept.portalId}</span>
+                <span>{dept.staffEmail || <em style={{ color: "var(--muted)" }}>Not configured</em>}</span>
+                <span>
+                  {dept.passwordConfigured ? (
+                    <span style={{ color: "var(--green)", fontWeight: 600 }}>● Active</span>
+                  ) : (
+                    <span style={{ color: "var(--orange)", fontWeight: 600 }}>○ Pending</span>
+                  )}
+                </span>
+                <button className="btn btn-small" onClick={() => setConfiguring(dept)}>
+                  Configure
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyAdminState text="No department configurations loaded." />
+        )}
+      </section>
+
+      {configuring && (
+        <ConfigureCredentialsModal
+          dept={configuring}
+          onClose={() => setConfiguring(null)}
+          onChanged={() => {
+            setConfiguring(null);
+            onChanged();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function ConfigureCredentialsModal({ dept, onClose, onChanged }: { dept: DepartmentAccess; onClose: () => void; onChanged: () => void }) {
+  const [email, setEmail] = useState(dept.staffEmail || "");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!email.trim() || !password) {
+      setError("Both staff email and password are required.");
+      return;
+    }
+    if (password.length < 12) {
+      setError("Password must be at least 12 characters.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+
+    try {
+      const response = await apiFetch("/api/complaints", {
+        method: "PATCH",
+        headers: {
+          ...demoHeaders("admin"),
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          action: "assign_department",
+          departmentId: dept.departmentId,
+          staffEmail: email.trim().toLowerCase(),
+          password: password
+        })
+      });
+      const data = await readJson<any>(response);
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to save credentials");
+      }
+      onChanged();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Saving credentials failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title="Configure credentials" eyebrow={dept.department} onClose={onClose}>
+      <form onSubmit={submit} className="complaint-form" style={{ display: "grid", gap: "16px" }}>
+        <p style={{ margin: 0, fontSize: "11px", color: "var(--muted)", lineHeight: 1.5 }}>
+          Set up the credentials that staff from the <strong>{dept.department}</strong> will use to log into their dashboard.
+        </p>
+        <label style={{ display: "grid", gap: "6px", fontWeight: "800", fontSize: "10px" }}>
+          Staff Email Address
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            placeholder="dept.officer@namo.gov.in"
+            style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--line)", borderRadius: "4px" }}
+          />
+        </label>
+        <label style={{ display: "grid", gap: "6px", fontWeight: "800", fontSize: "10px" }}>
+          New Password (minimum 12 characters)
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            minLength={12}
+            placeholder="••••••••••••"
+            style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--line)", borderRadius: "4px" }}
+          />
+        </label>
+        {error && <p className="form-error">{error}</p>}
+        <div className="form-actions" style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "8px" }}>
+          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>
+            Cancel
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={busy}>
+            {busy ? "Saving..." : "Save Credentials"}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
