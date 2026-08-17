@@ -1,4 +1,4 @@
-import ThemeToggle from "./ThemeToggle";
+import PublicLayout from "./PublicLayout";
 import { IconPin, IconTicket, IconSignal, IconClock, IconRefresh, IconCamera, IconArrowRight } from "./Icons";
 
 const steps = [
@@ -51,23 +51,8 @@ const slaData = [
 
 export default function HowItWorksPage() {
   return (
-    <div className="info-shell">
-      {/* Header */}
-      <header className="info-header">
-        <a className="brand" href="/">
-          <span className="brand-symbol"><i /><i /><i /></span>
-          <span><b>NAMO</b><small>JAN CONNECT</small></span>
-        </a>
-        <nav>
-          <a href="/how-it-works">How it works</a>
-          <a href="/about">About</a>
-          <a href="/gallery">Solved gallery</a>
-        </nav>
-        <div className="info-header-actions">
-          <ThemeToggle />
-        </div>
-      </header>
-
+    <PublicLayout activePath="/how-it-works">
+      <div className="info-shell">
       {/* Hero */}
       <section className="info-hero" style={{ minHeight: "480px" }}>
         <div className="info-orbit"><i /><i /><i /></div>
@@ -78,7 +63,7 @@ export default function HowItWorksPage() {
         <p>A complaint is routed instantly and remains traceable through every department action — visible to the citizen at every step.</p>
         <div style={{ marginTop: "36px", display: "flex", gap: "12px", flexWrap: "wrap" }}>
           <a href="/" className="btn btn-primary">File a complaint</a>
-          <a href="/gallery" className="btn btn-ghost" style={{ background: "white" }}>See resolved cases</a>
+          <a href="/gallery" className="btn btn-outline">See resolved cases</a>
         </div>
       </section>
 
@@ -95,11 +80,7 @@ export default function HowItWorksPage() {
               <span>{s.number}</span>
               <div>
                 <h3 style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <span style={{
-                    width: "36px", height: "36px", borderRadius: "50%",
-                    background: "rgba(241,90,50,.1)", display: "inline-flex",
-                    alignItems: "center", justifyContent: "center", flexShrink: 0,
-                  }}>
+                  <span style={{ width: "36px", height: "36px", borderRadius: "50%", background: "rgba(241,90,50,.1)", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                     <s.Icon size={18} color="var(--orange)" />
                   </span>
                   {s.title}
@@ -171,27 +152,7 @@ export default function HowItWorksPage() {
         <p>No login. No forms. Just describe the problem, pin the location, and let the system do its job.</p>
         <a href="/" className="btn btn-primary btn-large">File a complaint →</a>
       </section>
-
-      {/* Footer */}
-      <footer className="info-footer">
-        <div>
-          <a className="brand brand-light" href="/">
-            <span className="brand-symbol"><i /><i /><i /></span>
-            <span><b>NAMO</b><small>JAN CONNECT</small></span>
-          </a>
-          <p>Public accountability through transparent service tracking.</p>
-          <span>© {new Date().getFullYear()} NAMO Jan Connect</span>
-        </div>
-        <nav>
-          <a href="/how-it-works">How it works</a>
-          <a href="/about">About</a>
-          <a href="/gallery">Solved gallery</a>
-          <a href="/privacy">Privacy</a>
-          <a href="/accessibility">Accessibility</a>
-          <a href="/contact">Contact</a>
-        </nav>
-        <div />
-      </footer>
-    </div>
+      </div>
+    </PublicLayout>
   );
 }

@@ -39,48 +39,52 @@ function InfoPage({ data }: { data: (typeof info)[string] }) { return <div class
 
 function DashboardHub() {
   return (
-    <main className="access-denied" style={{ display: "grid", placeItems: "center", minHeight: "100vh", padding: "24px" }}>
-      <section className="staff-login" style={{ maxWidth: "640px", width: "100%", padding: "40px" }}>
-        <p className="eyebrow" style={{ color: "var(--orange)", fontWeight: 900, fontSize: "10px", margin: "0 0 12px" }}>PORTAL DASHBOARDS</p>
-        <h1 style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "28px", fontWeight: 550, margin: "0 0 24px" }}>Select Portal Dashboard</h1>
-        <div style={{ display: "grid", gap: "12px", width: "100%" }}>
-          <a href="/citizen" style={{ background: "var(--cream)", padding: "16px", borderRadius: "8px", display: "block", border: "1px solid var(--line)" }}>
-            <b style={{ color: "var(--ink)", display: "block", fontSize: "14px" }}>Citizen Dashboard</b>
-            <small style={{ color: "var(--muted)", display: "block", marginTop: "4px", fontSize: "10px", fontWeight: 500 }}>View filed complaints, resolution statuses, and live tracking timelines.</small>
-          </a>
-          <a href="/civic-infra" style={{ background: "var(--cream)", padding: "16px", borderRadius: "8px", display: "block", border: "1px solid var(--line)" }}>
-            <b style={{ color: "var(--ink)", display: "block", fontSize: "14px" }}>Civic & Infrastructure Portal</b>
-            <small style={{ color: "var(--muted)", display: "block", marginTop: "4px", fontSize: "10px", fontWeight: 500 }}>Resolve civic issues, manage water, streetlights, and roads.</small>
-          </a>
-          <a href="/health-education" style={{ background: "var(--cream)", padding: "16px", borderRadius: "8px", display: "block", border: "1px solid var(--line)" }}>
-            <b style={{ color: "var(--ink)", display: "block", fontSize: "14px" }}>Health & Education Portal</b>
-            <small style={{ color: "var(--muted)", display: "block", marginTop: "4px", fontSize: "10px", fontWeight: 500 }}>Manage clinic, hospital, and school-related issues.</small>
-          </a>
-          <a href="/law-order" style={{ background: "var(--cream)", padding: "16px", borderRadius: "8px", display: "block", border: "1px solid var(--line)" }}>
-            <b style={{ color: "var(--ink)", display: "block", fontSize: "14px" }}>Law & Order Portal</b>
-            <small style={{ color: "var(--muted)", display: "block", marginTop: "4px", fontSize: "10px", fontWeight: 500 }}>Review public safety, local policing, and order complaints.</small>
-          </a>
-          <a href="/transport" style={{ background: "var(--cream)", padding: "16px", borderRadius: "8px", display: "block", border: "1px solid var(--line)" }}>
-            <b style={{ color: "var(--ink)", display: "block", fontSize: "14px" }}>Transport & Public Services Portal</b>
-            <small style={{ color: "var(--muted)", display: "block", marginTop: "4px", fontSize: "10px", fontWeight: 500 }}>Manage transport permits, PWD roads, and transit issues.</small>
-          </a>
-          <a href="/employment-welfare" style={{ background: "var(--cream)", padding: "16px", borderRadius: "8px", display: "block", border: "1px solid var(--line)" }}>
-            <b style={{ color: "var(--ink)", display: "block", fontSize: "14px" }}>Employment & Welfare Portal</b>
-            <small style={{ color: "var(--muted)", display: "block", marginTop: "4px", fontSize: "10px", fontWeight: 500 }}>Review social pensions, jobs, and social support concerns.</small>
-          </a>
-          <a href="/admin" style={{ background: "var(--ink)", color: "white", padding: "16px", borderRadius: "8px", display: "block" }}>
-            <b style={{ color: "var(--paper)", display: "block", fontSize: "14px" }}>Administrator Dashboard</b>
-            <small style={{ color: "#aeb9b3", display: "block", marginTop: "4px", fontSize: "10px", fontWeight: 500 }}>Full oversight, department routing, and live SLA analytics.</small>
-          </a>
-        </div>
-        <a href="/" style={{ display: "block", marginTop: "24px", textAlign: "center", fontSize: "11px", color: "var(--orange)", fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.1em" }}>Return to public site</a>
-      </section>
+    <main className="dashboard-hub">
+      <div className="dashboard-hub-inner">
+        <p className="eyebrow">STAFF PORTALS</p>
+        <h1>Select Portal</h1>
+        <a href="/citizen" className="portal-link">
+          <b>Citizen Dashboard</b>
+          <small>View filed complaints, resolution statuses, and live tracking timelines.</small>
+        </a>
+        <a href="/civic-infra" className="portal-link">
+          <b>Civic &amp; Infrastructure Portal</b>
+          <small>Resolve civic issues, manage water, streetlights, and roads.</small>
+        </a>
+        <a href="/health-education" className="portal-link">
+          <b>Health &amp; Education Portal</b>
+          <small>Manage clinic, hospital, and school-related issues.</small>
+        </a>
+        <a href="/law-order" className="portal-link">
+          <b>Law &amp; Order Portal</b>
+          <small>Review public safety, local policing, and order complaints.</small>
+        </a>
+        <a href="/transport" className="portal-link">
+          <b>Transport &amp; Public Services Portal</b>
+          <small>Manage transport permits, PWD roads, and transit issues.</small>
+        </a>
+        <a href="/employment-welfare" className="portal-link">
+          <b>Employment &amp; Welfare Portal</b>
+          <small>Review social pensions, jobs, and social support concerns.</small>
+        </a>
+        <a href="/admin" className="portal-link portal-link-admin">
+          <b>Administrator Dashboard</b>
+          <small>Full oversight, department routing, and live SLA analytics.</small>
+        </a>
+        <a href="/" style={{ display: "block", marginTop: "20px", textAlign: "center", fontSize: "12px", color: "var(--accent-2)", fontWeight: 700 }}>← Return to public site</a>
+      </div>
     </main>
   );
 }
 
 export default function App() {
   const path = window.location.pathname.replace(/\/$/, "") || "/";
+  // Apply saved theme before first paint (synchronous, no flash)
+  const t = localStorage.getItem("njc-theme") || "light";
+  document.documentElement.dataset.theme = t;
+  document.documentElement.style.colorScheme = t === "dark" ? "dark" : "light";
+  const f = localStorage.getItem("njc-font") || "md";
+  document.documentElement.dataset.fontsize = f;
   if (path === "/admin") return <StaffLogin portal="admin"><NamoApp initialPortal="admin" /></StaffLogin>;
   if (path === "/citizen") return <NamoApp initialPortal="citizen" />;
   if (path === "/dashboard") return <DashboardHub />;

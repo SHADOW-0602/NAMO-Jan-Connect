@@ -15,6 +15,206 @@ No application data is written to local SQLite, PostgreSQL, or a local uploads f
 
 Python Workers are currently a Cloudflare beta feature. The implementation uses the required `python_workers` compatibility flag and Cloudflare's ASGI adapter to run FastAPI. Interactive API documentation is available at `/docs` and the OpenAPI schema at `/openapi.json`.
 
+## Database schema
+
+Source: [`backend/migrations/0001_initial.sql`](backend/migrations/0001_initial.sql) · Domain constants: [`backend/src/domain.py`](backend/src/domain.py)
+
+### Entity relationship diagram (Conceptual - Chen's Notation)
+
+```mermaid
+flowchart TD
+    %% ─── Entities (Rectangles) ───
+    Users[users]
+    Complaints[complaints]
+    Departments[departments]
+    Portals[department_portals]
+    Sessions[staff_sessions]
+    Attachments[complaint_attachments]
+    History[status_history]
+    Feedback[feedback]
+    Contact[contact_messages]
+
+    %% ─── Relationships (Diamonds) ───
+    rel_files{files}
+    rel_belongs{belongs_to}
+    rel_manages{manages}
+    rel_session{authenticates}
+    rel_routes{routes_to}
+    rel_uploads{uploads}
+    rel_contains{contains}
+    rel_updates{updates}
+    rel_logs{logs}
+    rel_receives{receives}
+    rel_reference{references}
+
+    %% ─── Connections between Entities and Relationships ───
+    Users --- rel_files --- Complaints
+    Users --- rel_belongs --- Departments
+    Departments --- rel_manages --- Portals
+    Users --- rel_session --- Sessions
+    Complaints --- rel_routes --- Departments
+    Users --- rel_uploads --- Attachments
+    Complaints --- rel_contains --- Attachments
+    Users --- rel_updates --- History
+    Complaints --- rel_logs --- History
+    Complaints --- rel_receives --- Feedback
+    Contact --- rel_reference --- Complaints
+
+    %% ─── Attributes (Ovals) ───
+    %% Users Attributes
+    u_id([id])
+    u_name([name])
+    u_email([email])
+    u_phone([phone])
+    u_role([role])
+    Users --- u_id
+    Users --- u_name
+    Users --- u_email
+    Users --- u_phone
+    Users --- u_role
+
+    %% Complaints Attributes
+    c_id([id])
+    c_track([tracking_id])
+    c_title([title])
+    c_desc([description])
+    c_status([status])
+    c_priority([priority])
+    c_loc([location_text])
+    c_sla([sla_due_at])
+    Complaints --- c_id
+    Complaints --- c_track
+    Complaints --- c_title
+    Complaints --- c_desc
+    Complaints --- c_status
+    Complaints --- c_priority
+    Complaints --- c_loc
+    Complaints --- c_sla
+
+    %% Departments Attributes
+    d_id([id])
+    d_name([name])
+    d_cat([category])
+    d_sla([sla_days])
+    Departments --- d_id
+    Departments --- d_name
+    Departments --- d_cat
+    Departments --- d_sla
+
+    %% Portals Attributes
+    p_id([id])
+    p_pid([portal_id])
+    p_email([staff_email])
+    Portals --- p_id
+    Portals --- p_pid
+    Portals --- p_email
+
+    %% Sessions Attributes
+    s_id([id])
+    s_hash([token_hash])
+    s_exp([expires_at])
+    Sessions --- s_id
+    Sessions --- s_hash
+    Sessions --- s_exp
+
+    %% Attachments Attributes
+    a_id([id])
+    a_key([object_key])
+    a_type([file_type])
+    Attachments --- a_id
+    Attachments --- a_key
+    Attachments --- a_type
+
+    %% History Attributes
+    h_id([id])
+    h_old([old_status])
+    h_new([new_status])
+    h_rem([remarks])
+    History --- h_id
+    History --- h_old
+    History --- h_new
+    History --- h_rem
+
+    %% Feedback Attributes
+    f_id([id])
+    f_rating([rating])
+    f_comm([comment])
+    Feedback --- f_id
+    Feedback --- f_rating
+    Feedback --- f_comm
+
+    %% Contact Attributes
+    co_id([id])
+    co_name([name])
+    co_email([email])
+    co_msg([message])
+    Contact --- co_id
+    Contact --- co_name
+    Contact --- co_email
+    Contact --- co_msg
+
+    %% ─── Style Definitions (GIGW / Emerald Green Theme) ───
+    classDef entity fill:#f0fdf4,stroke:#10b981,stroke-width:2px,color:#065f46,font-weight:bold;
+    classDef relation fill:#f0fdf4,stroke:#10b981,stroke-width:2px,color:#065f46;
+    classDef attribute fill:#ffffff,stroke:#10b981,stroke-width:1.5px,color:#065f46;
+
+    class Users,Complaints,Departments,Portals,Sessions,Attachments,History,Feedback,Contact entity;
+    class rel_files,rel_belongs,rel_manages,rel_session,rel_routes,rel_uploads,rel_contains,rel_updates,rel_logs,rel_receives,rel_reference relation;
+    class u_id,u_name,u_email,u_phone,u_role,c_id,c_track,c_title,c_desc,c_status,c_priority,c_loc,c_sla,d_id,d_name,d_cat,d_sla,p_id,p_pid,p_email,s_id,s_hash,s_exp,a_id,a_key,a_type,h_id,h_old,h_new,h_rem,f_id,f_rating,f_comm,co_id,co_name,co_email,co_msg attribute;
+```
+
+
+### Entities
+
+| Table | Role | Key columns |
+|---|---|---|
+| `departments` | The 5 government departments that handle complaints | `category` (enum), `sla_days` |
+| `department_portals` | Portal credentials and stable ID per department | `portal_id`, `staff_email` |
+| `users` | Unified table for citizens, department staff, and admins | `role`, `department_id` |
+| `staff_sessions` | Bearer-token auth for department and admin staff | `token_hash` (SHA-256), `expires_at` |
+| `complaints` | Core entity — every public grievance | `tracking_id`, `status`, `sla_due_at`, GPS coords |
+| `complaint_attachments` | Evidence and resolution photos stored in R2 | `object_key`, `file_type` |
+| `status_history` | Immutable audit trail — every status transition | `old_status → new_status`, `remarks` |
+| `feedback` | Citizen satisfaction rating after resolution | `rating` (1–5), `comment` |
+| `contact_messages` | Free-form messages from the contact page | `tracking_id` soft-link, `status` |
+
+### Complaint status lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> submitted : Citizen files grievance
+
+    submitted    --> acknowledged : Department reviews
+    submitted    --> rejected     : Department rejects
+
+    acknowledged --> in_progress  : Work started
+    acknowledged --> rejected     : Reason provided
+
+    in_progress  --> resolved     : Issue fixed
+    in_progress  --> rejected     : Unfeasible
+
+    resolved     --> reopened     : Citizen disputes
+    rejected     --> reopened     : Citizen disputes
+
+    reopened     --> acknowledged : Re-routed
+    reopened     --> in_progress  : Fast-tracked
+
+    resolved --> [*]
+```
+
+Valid transitions are enforced in [`domain.py`](backend/src/domain.py) via the `TRANSITIONS` map and validated in the Worker before any `UPDATE` is executed against D1.
+
+### Indexes
+
+| Index | Columns | Purpose |
+|---|---|---|
+| `idx_complaints_department_status` | `(department_id, status)` | Fast department queue filtering |
+| `idx_complaints_tracking` | `(tracking_id)` | Public tracking ID lookup |
+| `idx_sessions_token` | `(token_hash, expires_at)` | Auth token validation |
+| `idx_history_complaint` | `(complaint_id, changed_at)` | Chronological audit trail per complaint |
+
+
+
 ## Repository layout
 
 - `frontend/` - React, Vite, Pages configuration, and SPA redirects.
