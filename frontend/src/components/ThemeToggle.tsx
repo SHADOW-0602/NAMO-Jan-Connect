@@ -1,16 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Sun, Moon, Contrast, Type, Globe } from "lucide-react";
+import { Sun, Moon } from "lucide-react";
 
-type Theme = "light" | "dark" | "contrast";
+type Theme = "light" | "dark";
 
 export default function ThemeToggle() {
   const [theme, setTheme] = useState<Theme>("light");
 
   useEffect(() => {
-    const saved = localStorage.getItem("njc-theme") as Theme | null;
-    const current = saved || (document.documentElement.dataset.theme as Theme) || "light";
+    const saved = localStorage.getItem("njc-theme");
+    const current: Theme = saved === "dark" || (document.documentElement.dataset.theme === "dark") ? "dark" : "light";
     setTheme(current);
     apply(current);
   }, []);
@@ -21,14 +21,14 @@ export default function ThemeToggle() {
   }
 
   function toggleTheme() {
-    const next: Theme = theme === "light" ? "dark" : theme === "dark" ? "contrast" : "light";
+    const next: Theme = theme === "light" ? "dark" : "light";
     apply(next);
     localStorage.setItem("njc-theme", next);
     setTheme(next);
   }
 
-  const icons = { light: <Sun size={13} />, dark: <Moon size={13} />, contrast: <Contrast size={13} /> };
-  const labels = { light: "Light", dark: "Dark", contrast: "HC" };
+  const icons = { light: <Sun size={13} />, dark: <Moon size={13} /> };
+  const labels = { light: "Light", dark: "Dark" };
 
   return (
     <button
@@ -49,20 +49,20 @@ export function ThemeToggleInline() {
   const [theme, setTheme] = useState<Theme>("light");
 
   useEffect(() => {
-    const saved = localStorage.getItem("njc-theme") as Theme | null;
-    const current = saved || "light";
+    const saved = localStorage.getItem("njc-theme");
+    const current: Theme = saved === "dark" ? "dark" : "light";
     setTheme(current);
   }, []);
 
   function toggleTheme() {
-    const next: Theme = theme === "light" ? "dark" : theme === "dark" ? "contrast" : "light";
+    const next: Theme = theme === "light" ? "dark" : "light";
     document.documentElement.dataset.theme = next;
     document.documentElement.style.colorScheme = next === "dark" ? "dark" : "light";
     localStorage.setItem("njc-theme", next);
     setTheme(next);
   }
 
-  const icons = { light: <Sun size={12} />, dark: <Moon size={12} />, contrast: <Contrast size={12} /> };
+  const icons = { light: <Sun size={12} />, dark: <Moon size={12} /> };
 
   return (
     <button

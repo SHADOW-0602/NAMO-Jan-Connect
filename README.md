@@ -9,6 +9,7 @@ A Cloudflare-native complaint-management platform with anonymous citizen reporti
 | Frontend | Pages | React 19 + Vite single-page application |
 | API | FastAPI on Python Workers | Typed HTTP routing, authentication, complaint routing, tracking, and administration |
 | Relational data | D1 | Citizens, departments, complaints, history, sessions, and contact records |
+| Key-value store | Workers KV (`NJC_OFFICERS_KV`) | Officer assignments per department, password reset tokens |
 | Object storage | R2 Standard | Complaint evidence and department resolution photographs |
 
 No application data is written to local SQLite, PostgreSQL, or a local uploads folder. The Worker accesses D1 and R2 through native bindings; no database passwords or R2 access keys are exposed to the application.
@@ -218,9 +219,12 @@ Valid transitions are enforced in [`domain.py`](backend/src/domain.py) via the `
 ## Repository layout
 
 - `frontend/` - React, Vite, Pages configuration, and SPA redirects.
+- `frontend/src/api.ts` - API helpers including Cloudflare KV officer management and password reset.
+- `frontend/src/components/PublicLayout.tsx` - Shared layout wrapper for public-facing pages (About, Gallery, How It Works).
+- `frontend/src/components/ForgotPasswordModal.tsx` - Staff password reset modal (sends reset token via SMTP).
 - `backend/src/` - FastAPI application and Python Worker ASGI entry point.
 - `backend/migrations/` - D1 schema and initial department portal records.
-- `backend/wrangler.jsonc` - Worker, D1, and R2 binding configuration.
+- `backend/wrangler.jsonc` - Worker, D1, R2, and KV binding configuration.
 - `.env.example` - local frontend values and required Worker secret names.
 
 ## Cloudflare provisioning
@@ -241,14 +245,22 @@ Copy the returned database ID into `backend/wrangler.jsonc`, replacing `REPLACE_
 npx wrangler r2 bucket create namo-jan-connect-evidence
 ```
 
-3. Apply the D1 schema and seed the five department portal IDs:
+3. Create the KV namespace for officer data and password reset tokens:
+
+```powershell
+npx wrangler kv namespace create NJC_OFFICERS_KV
+```
+
+Copy the returned namespace ID into `backend/wrangler.jsonc` under the `kv_namespaces` binding.
+
+4. Apply the D1 schema and seed the five department portal IDs:
 
 ```powershell
 cd backend
 npx wrangler d1 migrations apply namo-jan-connect --remote
 ```
 
-4. Configure encrypted staff credentials and Gmail SMTP secrets:
+5. Configure encrypted staff credentials and Gmail SMTP secrets:
 
 ```powershell
 uv run pywrangler secret put ADMIN_EMAIL
@@ -257,16 +269,16 @@ uv run pywrangler secret put SMTP_USER
 uv run pywrangler secret put SMTP_PASS
 ```
 
-*Note: `SMTP_USER` is the sender Gmail address and `SMTP_PASS` is the Gmail App Password.*
+*Note: `SMTP_USER` is the sender Gmail address and `SMTP_PASS` is the Gmail App Password. SMTP credentials are also used to deliver password reset tokens to department staff.*
 
 
-5. Deploy the Python Worker:
+6. Deploy the Python Worker:
 
 ```powershell
 uv run pywrangler deploy
 ```
 
-6. Set `VITE_API_URL` to the deployed Worker URL and deploy React to Pages:
+7. Set `VITE_API_URL` to the deployed Worker URL and deploy React to Pages:
 
 ```powershell
 npm run deploy:frontend
@@ -323,15 +335,41 @@ npx wrangler d1 migrations apply namo-jan-connect --local
 
 Portal IDs are assigned by the D1 seed migration and remain stable identifiers for routing and administration. The administrator configures a required staff email and a different password for each portal from `/admin`. Department staff sign in with that email and portal-specific password; passwords are stored only as salted PBKDF2 hashes in D1.
 
+## Officer management
+
+Each department maintains its own roster of assigned officers (field inspectors, engineers, support staff). Officer data is persisted in Cloudflare Workers KV under the `NJC_OFFICERS_KV` namespace, keyed by department category (e.g., `officers:civic_infra`).
+
+| API endpoint | Method | Purpose |
+|---|---|---|
+| `/kv/officers/:category` | `GET` | Retrieve officers for a department |
+| `/kv/officers/:category` | `POST` | Save or update the officer roster |
+| `/kv/reset-password` | `POST` | Request a password reset token (sent via SMTP) |
+
+- Department staff can add or remove officers from the **Team workload** section of the department sidebar.
+- The administrator can view officer performance across all departments from the admin portal.
+- No officer data is stored in `localStorage` or hard-coded in the frontend; all reads and writes go through the KV-backed API.
+
+## Password reset
+
+Department staff who forget their password can request a reset from the login screen. The flow:
+
+1. Staff clicks **Forgot Password** and enters their registered email address.
+2. The Worker generates a time-limited reset token, stores it in KV (15-minute TTL), and sends it to the staff email via Gmail SMTP.
+3. Staff uses the token to set a new password, which is stored as a salted PBKDF2 hash in D1.
+
+No CAPTCHA is required. Rate limiting is not currently enforced on the reset endpoint.
+
 ## Data and privacy behavior
 
 - Citizen email address is optional. If provided, the platform automatically sends email updates (complaint filing confirmation and subsequent status transitions) via Gmail SMTP using Cloudflare TCP sockets.
 - D1 stores relational records and R2 object keys.
+- KV stores officer rosters per department and short-lived password reset tokens.
 - R2 stores the image bytes under complaint-specific prefixes.
 - Public tracking responses omit citizen email and phone.
 - Public gallery access is limited to resolution images.
 - Department queries are filtered by the authenticated staff member's `department_id` in the Worker.
 - Staff bearer tokens are stored as SHA-256 hashes in D1 and expire automatically.
+- Password reset tokens are stored in KV with a 15-minute TTL and are single-use.
 - Images are limited to JPG, PNG, or WEBP and the configured size limit.
 
 ## Validation

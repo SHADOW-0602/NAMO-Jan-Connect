@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Sun, Moon, Contrast, Globe } from "lucide-react";
 import { useLanguage } from "../context/LanguageContext";
 
-type Theme = "light" | "dark" | "contrast";
+type Theme = "light" | "dark";
 type FontSize = "sm" | "md" | "lg";
 
 export default function AccessibilityBar() {
@@ -13,7 +13,8 @@ export default function AccessibilityBar() {
   const { language, setLanguage, t } = useLanguage();
 
   useEffect(() => {
-    const savedTheme = (localStorage.getItem("njc-theme") as Theme) || "light";
+    const saved = localStorage.getItem("njc-theme");
+    const savedTheme: Theme = saved === "dark" ? "dark" : "light";
     const savedFont = (localStorage.getItem("njc-font") as FontSize) || "md";
     setTheme(savedTheme);
     setFontSize(savedFont);
@@ -44,9 +45,10 @@ export default function AccessibilityBar() {
 
   return (
     <div className="accessibility-bar" role="banner" aria-label="Accessibility and language controls">
-      {/* Gov Identity */}
       <div className="a11y-gov-label">
-        <span className="emblem" aria-hidden="true">🦁</span>
+        <span className="emblem" aria-hidden="true" style={{ background: "none", borderRadius: "0" }}>
+          <img src="/emblem.png" alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+        </span>
         <span>
           {t("a11y.gov_label")}{" "}
           <span style={{ fontFamily: "var(--font-devanagari)", fontSize: "10px", letterSpacing: "0.04em" }}>
@@ -65,10 +67,6 @@ export default function AccessibilityBar() {
         <button className={`a11y-btn ${theme === "dark" ? "active" : ""}`} onClick={() => changeTheme("dark")} aria-pressed={theme === "dark"} aria-label="Dark mode" title="Dark mode">
           <Moon size={11} style={{ display: "inline", verticalAlign: "middle", marginRight: 3 }} />
           {t("a11y.dark")}
-        </button>
-        <button className={`a11y-btn ${theme === "contrast" ? "active" : ""}`} onClick={() => changeTheme("contrast")} aria-pressed={theme === "contrast"} aria-label="High contrast mode" title="High contrast (GIGW)">
-          <Contrast size={11} style={{ display: "inline", verticalAlign: "middle", marginRight: 3 }} />
-          {t("a11y.contrast")}
         </button>
 
         <span className="a11y-divider" aria-hidden="true" />

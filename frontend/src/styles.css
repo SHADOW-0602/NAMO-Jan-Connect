@@ -97,9 +97,9 @@ html[data-fontsize="md"] body { font-size: 16px; }
 html[data-fontsize="lg"] body { font-size: 19px; }
 
 /* Scale the main content prose areas proportionally */
-html[data-fontsize="sm"] p,
-html[data-fontsize="sm"] li,
-html[data-fontsize="sm"] label,
+html[data-fontsize="sm"] p:not(.staff-login p),
+html[data-fontsize="sm"] li:not(.staff-login li),
+html[data-fontsize="sm"] label:not(.staff-login label):not(.staff-login *),
 html[data-fontsize="sm"] .hero-lede,
 html[data-fontsize="sm"] .how p,
 html[data-fontsize="sm"] .step-card p,
@@ -107,9 +107,9 @@ html[data-fontsize="sm"] .info-body,
 html[data-fontsize="sm"] .gallery-note,
 html[data-fontsize="sm"] .info-intro { font-size: 13px !important; }
 
-html[data-fontsize="lg"] p,
-html[data-fontsize="lg"] li,
-html[data-fontsize="lg"] label,
+html[data-fontsize="lg"] p:not(.staff-login p),
+html[data-fontsize="lg"] li:not(.staff-login li),
+html[data-fontsize="lg"] label:not(.staff-login label):not(.staff-login *),
 html[data-fontsize="lg"] .hero-lede,
 html[data-fontsize="lg"] .how p,
 html[data-fontsize="lg"] .step-card p,
@@ -117,12 +117,12 @@ html[data-fontsize="lg"] .info-body,
 html[data-fontsize="lg"] .gallery-note,
 html[data-fontsize="lg"] .info-intro { font-size: 18px !important; }
 
-html[data-fontsize="sm"] h1 { font-size: clamp(26px, 5vw, 44px) !important; }
-html[data-fontsize="lg"] h1 { font-size: clamp(38px, 7vw, 72px) !important; }
-html[data-fontsize="sm"] h2 { font-size: clamp(20px, 3.5vw, 32px) !important; }
-html[data-fontsize="lg"] h2 { font-size: clamp(28px, 5vw, 48px) !important; }
-html[data-fontsize="sm"] h3 { font-size: 16px !important; }
-html[data-fontsize="lg"] h3 { font-size: 22px !important; }
+html[data-fontsize="sm"] h1:not(.staff-login h1) { font-size: clamp(26px, 5vw, 44px) !important; }
+html[data-fontsize="lg"] h1:not(.staff-login h1) { font-size: clamp(38px, 7vw, 72px) !important; }
+html[data-fontsize="sm"] h2:not(.staff-login h2) { font-size: clamp(20px, 3.5vw, 32px) !important; }
+html[data-fontsize="lg"] h2:not(.staff-login h2) { font-size: clamp(28px, 5vw, 48px) !important; }
+html[data-fontsize="sm"] h3:not(.staff-login h3) { font-size: 16px !important; }
+html[data-fontsize="lg"] h3:not(.staff-login h3) { font-size: 22px !important; }
 
 button, input, select, textarea { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
@@ -2046,12 +2046,15 @@ img { display: block; max-width: 100%; }
 .status-chart > div:last-child { padding: 16px 22px; }
 .status-chart p {
   display: grid;
-  grid-template-columns: 90px 1fr 32px;
+  grid-template-columns: minmax(90px, max-content) 1fr 32px;
   gap: 12px;
   align-items: center;
   margin: 10px 0;
   font-size: 9px;
   color: var(--muted);
+}
+.status-chart p > span {
+  white-space: nowrap;
 }
 .status-chart p > i { height: 7px; background: var(--surface-2); border-radius: 10px; overflow: hidden; }
 .status-chart p > i > b { display: block; height: 100%; background: var(--link); border-radius: 10px; transition: width 0.5s ease; }
@@ -2075,7 +2078,7 @@ img { display: block; max-width: 100%; }
 }
 .performance-row:last-child { border-bottom: none; }
 .performance-row > div:first-child { display: flex; align-items: center; gap: 8px; }
-.performance-row > div:first-child > span { font-size: 10px; font-weight: 700; color: var(--ink); }
+.performance-row > div:first-child > span:not(.category-badge) { font-size: 10px; font-weight: 700; color: var(--ink); }
 .stack-track {
   height: 10px;
   background: var(--surface-2);
@@ -3171,7 +3174,35 @@ img { display: block; max-width: 100%; }
   .portal-header { padding: 0 14px; }
   .portal-title { display: none; }
   .portal-shell { grid-template-columns: 1fr; }
-  .sidebar { display: none; }
+  .sidebar {
+    display: flex;
+    flex-direction: row;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--accent);
+    border-right: none !important;
+  }
+  .sidebar nav {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+    overflow-x: auto;
+    width: 100%;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px;
+  }
+  .sidebar nav button {
+    padding: 8px 12px;
+    white-space: nowrap;
+    font-size: 11px;
+    width: auto;
+    text-align: center;
+    justify-content: center;
+  }
+  .sidebar nav button span {
+    font-size: 10px;
+    width: auto;
+  }
   .workspace { padding: 24px 14px; }
   .workspace-heading h1 { font-size: 26px; }
   .metric-row { grid-template-columns: 1fr 1fr; }

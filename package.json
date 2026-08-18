@@ -2,8 +2,12 @@
   "name": "namo-jan-connect",
   "version": "1.0.0",
   "private": true,
-  "workspaces": ["frontend"],
-  "engines": { "node": ">=22.13.0" },
+  "workspaces": [
+    "frontend"
+  ],
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
     "dev": "npm --workspace frontend run dev",
     "dev:frontend": "npm --workspace frontend run dev",
@@ -14,5 +18,8 @@
     "deploy:api": "cd backend && uv run pywrangler deploy",
     "deploy:frontend": "npm --workspace frontend run build && cd frontend && npx wrangler pages deploy dist --project-name namo-jan-connect",
     "deploy:vercel": "npm --workspace frontend run build && cd frontend && npx vercel --prod"
+  },
+  "dependencies": {
+    "wrangler": "^4.123.0"
   }
 }

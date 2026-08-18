@@ -110,8 +110,8 @@ SELECT c.id, c.tracking_id AS trackingId, c.title, c.description,
        c.resolved_at AS resolvedAt, c.sla_due_at AS slaDueAt,
        d.name AS department, d.id AS departmentId,
        u.name AS citizenName, u.email AS citizenEmail, u.phone AS citizenPhone
-FROM complaints c JOIN departments d ON d.id=c.department_id
-JOIN users u ON u.id=c.citizen_id
+FROM complaints c LEFT JOIN departments d ON d.id=c.department_id
+LEFT JOIN users u ON u.id=c.citizen_id
 """
 
 
@@ -163,6 +163,28 @@ async def complaint_get(env, request, query: dict[str, list[str]]) -> Response:
             raise ApiError(404, "Tracking ID not found")
         item["citizenName"] = "Citizen"
         item.pop("citizenEmail", None); item.pop("citizenPhone", None)
+        
+        history_rows = await db_all(env.DB, """
+            SELECT h.old_status AS oldStatus, h.new_status AS newStatus, h.remarks,
+                   h.changed_at AS changedAt, u.name AS changedByName, u.role AS changedByRole
+            FROM status_history h
+            LEFT JOIN users u ON u.id = h.changed_by
+            WHERE h.complaint_id = ?
+            ORDER BY h.changed_at ASC
+        """, item["id"])
+        
+        for h in history_rows:
+            role = h.pop("changedByRole")
+            name = h.pop("changedByName")
+            if role == "citizen":
+                h["changedBy"] = "Citizen"
+            elif role == "admin":
+                h["changedBy"] = "System Administrator"
+            elif role == "department_staff":
+                h["changedBy"] = "Department Officer"
+            else:
+                h["changedBy"] = name or "System Router"
+        item["history"] = history_rows
         return json_response(env, item)
     if scope == "gallery":
         parsed_url = urlparse(str(request.url))
@@ -179,6 +201,20 @@ async def complaint_get(env, request, query: dict[str, list[str]]) -> Response:
     if scope == "admin":
         require_role(user, "admin")
         complaints = await db_all(env.DB, COMPLAINT_SELECT + " ORDER BY c.created_at DESC")
+        history_rows = await db_all(env.DB, """
+            SELECT h.complaint_id AS complaintId, h.old_status AS oldStatus, h.new_status AS newStatus,
+                   h.remarks, h.changed_at AS changedAt, u.name AS changedBy
+            FROM status_history h
+            LEFT JOIN users u ON u.id = h.changed_by
+            ORDER BY h.changed_at ASC
+        """)
+        history_map = {}
+        for row in history_rows:
+            cid = row.pop("complaintId")
+            history_map.setdefault(cid, []).append(row)
+        for c in complaints:
+            c["history"] = history_map.get(c["id"], [])
+
         access = await db_all(env.DB, """SELECT dp.department_id AS departmentId, d.name AS department, d.category,
             dp.portal_id AS portalId, dp.staff_email AS staffEmail,
             CASE WHEN dp.password_hash IS NULL THEN 0 ELSE 1 END AS passwordConfigured FROM department_portals dp
@@ -187,6 +223,20 @@ async def complaint_get(env, request, query: dict[str, list[str]]) -> Response:
     if scope == "department":
         staff = require_role(user, "department_staff", "admin")
         complaints = await db_all(env.DB, COMPLAINT_SELECT + (" ORDER BY c.created_at DESC" if staff["role"] == "admin" else " WHERE c.department_id=? ORDER BY c.created_at DESC"), *(() if staff["role"] == "admin" else (staff["departmentId"],)))
+        history_rows = await db_all(env.DB, """
+            SELECT h.complaint_id AS complaintId, h.old_status AS oldStatus, h.new_status AS newStatus,
+                   h.remarks, h.changed_at AS changedAt, u.name AS changedBy
+            FROM status_history h
+            LEFT JOIN users u ON u.id = h.changed_by
+            ORDER BY h.changed_at ASC
+        """)
+        history_map = {}
+        for row in history_rows:
+            cid = row.pop("complaintId")
+            history_map.setdefault(cid, []).append(row)
+        for c in complaints:
+            c["history"] = history_map.get(c["id"], [])
+            
         return json_response(env, {"complaints": complaints})
     raise ApiError(400, "Unknown scope")
 

@@ -21,6 +21,19 @@ export function useLanguage() {
 // ─── Translation strings ────────────────────────────────────────────────────
 const translations: Record<Language, Record<string, string>> = {
   en: {
+    // Login Page
+    "login.secure_portal": "SECURE STAFF PORTAL",
+    "login.admin_signin": "Administrator Sign In",
+    "login.dept_signin": "Portal Sign In",
+    "login.admin_help": "Use the single administrator email.",
+    "login.dept_help": "Use the staff email and unique password assigned to this department portal.",
+    "login.email": "Staff Email Address",
+    "login.admin_email": "Administrator Email Address",
+    "login.password": "Password",
+    "login.signin": "Sign In",
+    "login.signing_in": "Signing In...",
+    "login.return": "← Return to public site",
+
     // Accessibility bar
     "a11y.light": "Light",
     "a11y.dark": "Dark",
@@ -141,6 +154,19 @@ const translations: Record<Language, Record<string, string>> = {
   },
 
   hi: {
+    // Login Page
+    "login.secure_portal": "सुरक्षित कर्मचारी पोर्टल",
+    "login.admin_signin": "प्रशासक साइन इन",
+    "login.dept_signin": "विभाग पोर्टल साइन इन",
+    "login.admin_help": "एकल प्रशासक ईमेल का उपयोग करें।",
+    "login.dept_help": "इस विभाग पोर्टल को सौंपे गए स्टाफ ईमेल और अद्वितीय पासवर्ड का उपयोग करें।",
+    "login.email": "कर्मचारी ईमेल पता",
+    "login.admin_email": "प्रशासक ईमेल पता",
+    "login.password": "पासवर्ड",
+    "login.signin": "साइन इन करें",
+    "login.signing_in": "साइन इन हो रहा है...",
+    "login.return": "← सार्वजनिक साइट पर लौटें",
+
     // Accessibility bar
     "a11y.light": "उजला",
     "a11y.dark": "गहरा",

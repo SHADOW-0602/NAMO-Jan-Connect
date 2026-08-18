@@ -7,14 +7,16 @@ import ResolvedGallery from "./ResolvedGallery";
 import AccessibilityBar from "./AccessibilityBar";
 import GovHeader from "./GovHeader";
 import TickerBanner from "./TickerBanner";
+import Modal from "./Modal";
 import { LanguageProvider, useLanguage } from "../context/LanguageContext";
-import { apiFetch, readJson } from "../api";
+import { apiFetch, readJson, fetchOfficers, saveOfficers } from "../api";
 
 type Portal = "public" | "citizen" | "department" | "admin";
 type Complaint = {
   id: number; trackingId: string; title: string; description: string; location: string;
   category: string; status: string; priority: string; createdAt: string; updatedAt: string;
   slaDueAt: string; department: string; departmentId: number; citizenName?: string; citizenEmail?: string; citizenPhone?: string;
+  resolvedAt?: string | null;
   history?: { oldStatus: string | null; newStatus: string; remarks: string; changedAt: string; changedBy: string }[];
 };
 type DepartmentAccess = { departmentId: number; department: string; category: string; portalId: string; staffEmail: string | null; passwordConfigured: number };
@@ -27,6 +29,8 @@ const categoryMeta: Record<string, { label: string; short: string; tone: string;
   transport: { label: "Transport & Public Services", short: "Transport", tone: "blue", mark: "TP" },
   employment_welfare: { label: "Employment & Welfare", short: "Welfare", tone: "green", mark: "EW" },
 };
+
+
 
 const statusLabels: Record<string, string> = { submitted: "Submitted", acknowledged: "Acknowledged", in_progress: "In progress", resolved: "Resolved", rejected: "Rejected", reopened: "Reopened" };
 const nextStatuses: Record<string, string[]> = { submitted: ["acknowledged", "rejected"], acknowledged: ["in_progress", "rejected"], in_progress: ["resolved", "rejected"], resolved: ["reopened"], rejected: ["reopened"], reopened: ["acknowledged", "in_progress"] };
@@ -48,6 +52,48 @@ function Brand({ light = false }: { light?: boolean }) {
   return <a className={`brand ${light ? "brand-light" : ""}`} href="/" aria-label="NAMO Jan Connect home"><span className="brand-symbol"><i /><i /><i /></span><span><b>NAMO</b><small>JAN CONNECT</small></span></a>;
 }
 
+function computeDynamicOfficerStats(officers: any[], complaints: Complaint[], category: string) {
+  if (!officers || officers.length === 0) return [];
+  const sortedOfficers = [...officers].sort((a, b) => a.id.localeCompare(b.id));
+  const deptComplaints = complaints.filter(c => c.category === category);
+  const sortedComplaints = [...deptComplaints].sort((a, b) => a.id - b.id);
+  const assignments = sortedOfficers.map(officer => ({
+    ...officer,
+    activeCases: 0,
+    totalCases: 0,
+    onTimeCases: 0
+  }));
+  sortedComplaints.forEach((complaint, index) => {
+    const officerIndex = index % sortedOfficers.length;
+    const o = assignments[officerIndex];
+    o.totalCases += 1;
+    const isActive = !["resolved", "rejected"].includes(complaint.status);
+    if (isActive) {
+      o.activeCases += 1;
+    }
+    const isResolved = complaint.status === "resolved";
+    if (isResolved) {
+      const resolvedDate = complaint.resolvedAt ? new Date(complaint.resolvedAt) : new Date(complaint.updatedAt);
+      const dueDate = new Date(complaint.slaDueAt);
+      if (resolvedDate <= dueDate) {
+        o.onTimeCases += 1;
+      }
+    } else {
+      const isOverdue = new Date(complaint.slaDueAt) < new Date();
+      if (!isOverdue) {
+        o.onTimeCases += 1;
+      }
+    }
+  });
+  return assignments.map(o => ({
+    ...o,
+    cases: o.activeCases,
+    performance: o.totalCases > 0 
+      ? `${Math.round((o.onTimeCases / o.totalCases) * 100)}% on-time` 
+      : "100% on-time"
+  }));
+}
+
 function StatusPill({ status }: { status: string }) { return <span className={`status status-${status}`}><i />{statusLabels[status] ?? status}</span>; }
 
 function CategoryBadge({ category, full = false }: { category: string; full?: boolean }) {
@@ -63,10 +109,6 @@ function StatusTimeline({ complaint }: { complaint: Complaint }) {
   </div>;
 }
 
-function Modal({ title, eyebrow, onClose, children, wide = false }: { title: string; eyebrow?: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
-  useEffect(() => { const close = (event: KeyboardEvent) => event.key === "Escape" && onClose(); window.addEventListener("keydown", close); return () => window.removeEventListener("keydown", close); }, [onClose]);
-  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.currentTarget === event.target && onClose()}><div className={`modal ${wide ? "modal-wide" : ""}`} role="dialog" aria-modal="true" aria-label={title}><button className="modal-close" onClick={onClose} aria-label="Close">×</button>{eyebrow && <p className="eyebrow">{eyebrow}</p>}<h2>{title}</h2>{children}</div></div>;
-}
 
 export default function NamoApp({ initialPortal = "public" }: { initialPortal?: Portal }) {
   const [portal, setPortal] = useState<Portal>(initialPortal);
@@ -90,6 +132,11 @@ export default function NamoApp({ initialPortal = "public" }: { initialPortal?: 
     const scope = next === "citizen" ? "mine" : next;
     try {
       const response = await apiFetch(`/api/complaints?scope=${scope}`, { headers: demoHeaders(next) });
+      if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem("njc_staff_session");
+        window.location.reload();
+        return;
+      }
       const data = await readJson<any>(response);
       if (response.ok) { setComplaints(data.complaints ?? []); if (data.departmentAccess) setDepartmentAccess(data.departmentAccess); }
     } catch {}
@@ -185,7 +232,7 @@ function PortalHeader({ portal, setPortal }: { portal: Portal; setPortal: (porta
   );
 }
 
-function Sidebar({ portal, active = "overview", onAdminNavigate }: { portal: Portal; active?: AdminSection; onAdminNavigate?: (section: AdminSection) => void }) {
+function Sidebar({ portal, active = "overview", onNavigate }: { portal: Portal; active?: string; onNavigate?: (section: any) => void }) {
   if (portal === "admin") {
     const items: { key: AdminSection; icon: string; label: string }[] = [
       { key: "overview", icon: "OV", label: "Overview" }, { key: "complaints", icon: "CQ", label: "Complaints" },
@@ -193,9 +240,19 @@ function Sidebar({ portal, active = "overview", onAdminNavigate }: { portal: Por
       { key: "activity", icon: "AC", label: "Activity" },
       { key: "analytics", icon: "AN", label: "Analytics" },
     ];
-    return <aside className="sidebar admin-sidebar"><nav aria-label="Administrator sections">{items.map((item) => <button key={item.key} type="button" className={active === item.key ? "active" : ""} onClick={() => onAdminNavigate?.(item.key)}><span>{item.icon}</span>{item.label}</button>)}</nav></aside>;
+    return <aside className="sidebar admin-sidebar"><nav aria-label="Administrator sections">{items.map((item) => <button key={item.key} type="button" className={active === item.key ? "active" : ""} onClick={() => onNavigate?.(item.key)}><span>{item.icon}</span>{item.label}</button>)}</nav></aside>;
   }
-  return <aside className="sidebar"><nav><button className="active"><span>OV</span>Overview</button><button><span>CQ</span>{portal === "citizen" ? "My complaints" : "Complaint queue"}</button>{portal !== "citizen" && <button><span>TW</span>Team workload</button>}<button><span>AC</span>Activity</button><button><span>ST</span>Settings</button></nav><div className="sidebar-help"><span>?</span><b>Need assistance?</b><p>Read the portal guide or contact support.</p><a href="mailto:support@namojanconnect.in">Get help →</a></div></aside>;
+  if (portal === "department") {
+    const items = [
+      { key: "overview", icon: "OV", label: "Overview" },
+      { key: "queue", icon: "CQ", label: "Complaint queue" },
+      { key: "workload", icon: "TW", label: "Team workload" },
+      { key: "activity", icon: "AC", label: "Activity" },
+      { key: "settings", icon: "ST", label: "Settings" }
+    ];
+    return <aside className="sidebar"><nav aria-label="Department sections">{items.map((item) => <button key={item.key} type="button" className={active === item.key ? "active" : ""} onClick={() => onNavigate?.(item.key)}><span>{item.icon}</span>{item.label}</button>)}</nav><div className="sidebar-help"><span>?</span><b>Need assistance?</b><p>Read the portal guide or contact support.</p><a href="mailto:kushagra.singh0602@gmail.com">Get help →</a></div></aside>;
+  }
+  return <aside className="sidebar"><nav><button className="active"><span>OV</span>Overview</button><button><span>CQ</span>{portal === "citizen" ? "My complaints" : "Complaint queue"}</button>{portal !== "citizen" && <button><span>TW</span>Team workload</button>}<button><span>AC</span>Activity</button><button><span>ST</span>Settings</button></nav><div className="sidebar-help"><span>?</span><b>Need assistance?</b><p>Read the portal guide or contact support.</p><a href="mailto:kushagra.singh0602@gmail.com">Get help →</a></div></aside>;
 }
 
 function CitizenPortal({ complaints, onFile, onSelect }: { complaints: Complaint[]; onFile: () => void; onSelect: (complaint: Complaint) => void }) {
@@ -206,25 +263,408 @@ function CitizenPortal({ complaints, onFile, onSelect }: { complaints: Complaint
 function Metric({ label, value, note, tone = "ink" }: { label: string; value: string | number; note: string; tone?: string }) { return <article className={`metric metric-${tone}`}><span>{label}</span><b>{value}</b><small>{note}</small></article>; }
 
 function DepartmentPortal({ complaints, onSelect, onChanged }: { complaints: Complaint[]; onSelect: (complaint: Complaint) => void; onChanged: () => void }) {
-  const [filter, setFilter] = useState("all"); const [updating, setUpdating] = useState<Complaint | null>(null);
+  const [section, setSection] = useState<"overview" | "queue" | "workload" | "activity" | "settings">("overview");
+  const [filter, setFilter] = useState("all");
+  const [updating, setUpdating] = useState<Complaint | null>(null);
+  
   const visible = complaints.filter((item) => filter === "all" || item.status === filter);
   const session = getStaffSession();
   const category = session?.department_category || Object.keys(categoryMeta).find(key => {
     const path = window.location.pathname.replace(/\/$/, "");
     return path === `/${key.replace("_", "-")}` || (key === "civic_infra" && path === "/civil-department");
-  });
+  }) || "civic_infra";
   const label = category && categoryMeta[category] ? categoryMeta[category].label.toUpperCase() : "DEPARTMENT PORTAL";
   const resolutionRate = complaints.length ? Math.round(complaints.filter((item) => item.status === "resolved").length / complaints.length * 100) : 0;
 
-  return <div className="portal-shell"><Sidebar portal="department" /><main className="workspace"><div className="workspace-heading"><div><p className="eyebrow">{label}</p><h1>Complaint queue</h1><p>Review, act, and keep citizens informed.</p></div><div className="queue-date">Resolution rate <b>{resolutionRate}%</b></div></div><div className="metric-row"><Metric label="Assigned" value={complaints.length} note="Current queue" /><Metric label="Needs attention" value={complaints.filter((item) => daysUntil(item.slaDueAt) <= 1 && item.status !== "resolved").length} note="SLA near or overdue" tone="coral" /><Metric label="In progress" value={complaints.filter((item) => item.status === "in_progress").length} note="Field work active" tone="blue" /><Metric label="Resolved total" value={complaints.filter((item) => item.status === "resolved").length} note="Live records" tone="green" /></div><section className="workspace-section"><div className="table-heading table-heading-filters"><div><h2>Assigned complaints</h2><p>Sorted by urgency and SLA.</p></div><div className="filters">{["all", "submitted", "acknowledged", "in_progress", "resolved"].map((item) => <button className={filter === item ? "active" : ""} onClick={() => setFilter(item)} key={item}>{item === "all" ? "All" : statusLabels[item]}</button>)}</div></div>{visible.length ? <div className="data-table"><div className="table-row table-labels"><span>Complaint</span><span>Citizen</span><span>Status</span><span>SLA</span><span>Action</span></div>{visible.map((complaint) => <div className="table-row" key={complaint.id}><button className="table-complaint" onClick={() => onSelect(complaint)}><CategoryBadge category={complaint.category} /><span><b>{complaint.title}</b><small>{complaint.trackingId}</small></span></button><span>{complaint.citizenName ?? "Citizen"}</span><StatusPill status={complaint.status} /><span className={daysUntil(complaint.slaDueAt) <= 1 && complaint.status !== "resolved" ? "sla-danger" : ""}>{complaint.status === "resolved" ? "Completed" : daysUntil(complaint.slaDueAt) < 0 ? `${Math.abs(daysUntil(complaint.slaDueAt))}d overdue` : `${daysUntil(complaint.slaDueAt)}d left`}</span><button className="btn btn-small" onClick={() => setUpdating(complaint)}>Update</button></div>)}</div> : <EmptyAdminState text="No real complaints are currently assigned to this department." />}</section>{updating && <UpdateModal complaint={updating} onClose={() => setUpdating(null)} onChanged={() => { setUpdating(null); onChanged(); }} />}</main></div>;
+  const urgentComplaints = complaints.filter((item) => daysUntil(item.slaDueAt) <= 1 && item.status !== "resolved");
+  const resolvedComplaints = complaints.filter((item) => item.status === "resolved");
+
+  // Load and save officers list via Cloudflare KV
+  const [officers, setOfficers] = useState<{ id: string; name: string; designation: string; status: string; cases: number; performance: string }[]>([]);
+
+  // Fetch officers when category or complaints change
+  useEffect(() => {
+    async function loadOfficers() {
+      try {
+        const data = await fetchOfficers(category);
+        setOfficers(data);
+      } catch (e) {
+        console.error('Failed to load officers', e);
+        setOfficers([]);
+      }
+    }
+    loadOfficers();
+  }, [category, complaints]);
+
+  // Save officers back to Cloudflare when they change
+  useEffect(() => {
+    async function save() {
+      try {
+        await saveOfficers(category, officers);
+      } catch (e) {
+        console.error('Failed to save officers', e);
+      }
+    }
+    if (officers.length) save();
+  }, [officers, category]);
+
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const dynamicOfficers = computeDynamicOfficerStats(officers, complaints, category);
+
+  return (
+    <div className="portal-shell">
+      <Sidebar portal="department" active={section} onNavigate={setSection} />
+      <main className="workspace">
+        {section === "overview" && (
+          <>
+            <div className="workspace-heading">
+              <div>
+                <p className="eyebrow">{label}</p>
+                <h1>Department overview</h1>
+                <p>Live performance metrics and summary of assigned citizen reports.</p>
+              </div>
+              <div className="queue-date">Resolution rate <b>{resolutionRate}%</b></div>
+            </div>
+
+            <div className="metric-row">
+              <Metric label="Assigned" value={complaints.length} note="Current workload" />
+              <Metric label="Needs attention" value={urgentComplaints.length} note="SLA near or overdue" tone="coral" />
+              <Metric label="In progress" value={complaints.filter((item) => item.status === "in_progress").length} note="Field work active" tone="blue" />
+              <Metric label="Resolved total" value={resolvedComplaints.length} note="Live records" tone="green" />
+            </div>
+
+            <div className="analytics-summary" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "24px", marginTop: "24px" }}>
+              <section className="workspace-section" style={{ margin: 0 }}>
+                <div className="table-heading">
+                  <div>
+                    <h2>Urgent tasks</h2>
+                    <p>Overdue or near-deadline assignments.</p>
+                  </div>
+                </div>
+                {urgentComplaints.length ? (
+                  <div className="data-table">
+                    {urgentComplaints.slice(0, 4).map((complaint) => (
+                      <div className="table-row" key={complaint.id} style={{ padding: "12px 8px" }}>
+                        <button className="table-complaint" onClick={() => onSelect(complaint)} style={{ background: "none", border: "none", textAlign: "left", cursor: "pointer", padding: 0 }}>
+                          <span><b>{complaint.title}</b><small>{complaint.trackingId}</small></span>
+                        </button>
+                        <StatusPill status={complaint.status} />
+                        <button className="btn btn-small" onClick={() => setUpdating(complaint)}>Update</button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ padding: "32px 16px", textAlign: "center", color: "var(--muted)", fontSize: "13px" }}>
+                    🎉 All assignments are comfortably within SLA limits.
+                  </div>
+                )}
+              </section>
+
+              <section className="workspace-section" style={{ margin: 0 }}>
+                <div className="table-heading">
+                  <div>
+                    <h2>Workload distribution</h2>
+                    <p>Breakdown of active cases by current status.</p>
+                  </div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "16px", padding: "20px 22px" }}>
+                  {["submitted", "acknowledged", "in_progress", "resolved"].map((statusKey) => {
+                    const count = complaints.filter(c => c.status === statusKey).length;
+                    const pct = complaints.length ? Math.round((count / complaints.length) * 100) : 0;
+                    return (
+                      <div key={statusKey} style={{ display: "grid", gridTemplateColumns: "100px 1fr 40px", alignItems: "center", gap: "12px", fontSize: "13px" }}>
+                        <span style={{ textTransform: "capitalize", fontWeight: 555 }}>{statusLabels[statusKey] || statusKey}</span>
+                        <div style={{ height: "8px", background: "rgba(0,0,0,0.06)", borderRadius: "4px", overflow: "hidden" }}>
+                          <div style={{ height: "100%", width: `${pct}%`, background: `var(--${statusKey === "resolved" ? "green" : statusKey === "in_progress" ? "blue" : "accent-2"})`, borderRadius: "4px" }} />
+                        </div>
+                        <b style={{ textAlign: "right" }}>{count}</b>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            </div>
+          </>
+        )}
+
+        {section === "queue" && (
+          <>
+            <div className="workspace-heading">
+              <div>
+                <p className="eyebrow">{label}</p>
+                <h1>Complaint queue</h1>
+                <p>Review, act, and keep citizens informed.</p>
+              </div>
+              <div className="queue-date">Resolution rate <b>{resolutionRate}%</b></div>
+            </div>
+
+            <div className="metric-row">
+              <Metric label="Assigned" value={complaints.length} note="Current queue" />
+              <Metric label="Needs attention" value={urgentComplaints.length} note="SLA near or overdue" tone="coral" />
+              <Metric label="In progress" value={complaints.filter((item) => item.status === "in_progress").length} note="Field work active" tone="blue" />
+              <Metric label="Resolved total" value={resolvedComplaints.length} note="Live records" tone="green" />
+            </div>
+
+            <section className="workspace-section">
+              <div className="table-heading table-heading-filters">
+                <div>
+                  <h2>Assigned complaints</h2>
+                  <p>Sorted by urgency and SLA.</p>
+                </div>
+                <div className="filters">
+                  {["all", "submitted", "acknowledged", "in_progress", "resolved"].map((item) => (
+                    <button className={filter === item ? "active" : ""} onClick={() => setFilter(item)} key={item}>
+                      {item === "all" ? "All" : statusLabels[item]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {visible.length ? (
+                <div className="data-table">
+                  <div className="table-row table-labels">
+                    <span>Complaint</span>
+                    <span>Citizen</span>
+                    <span>Status</span>
+                    <span>SLA</span>
+                    <span>Action</span>
+                  </div>
+                  {visible.map((complaint) => (
+                    <div className="table-row" key={complaint.id}>
+                      <button className="table-complaint" onClick={() => onSelect(complaint)}>
+                        <CategoryBadge category={complaint.category} />
+                        <span><b>{complaint.title}</b><small>{complaint.trackingId}</small></span>
+                      </button>
+                      <span>{complaint.citizenName ?? "Citizen"}</span>
+                      <StatusPill status={complaint.status} />
+                      <span className={daysUntil(complaint.slaDueAt) <= 1 && complaint.status !== "resolved" ? "sla-danger" : ""}>
+                        {complaint.status === "resolved" ? "Completed" : daysUntil(complaint.slaDueAt) < 0 ? `${Math.abs(daysUntil(complaint.slaDueAt))}d overdue` : `${daysUntil(complaint.slaDueAt)}d left`}
+                      </span>
+                      <button className="btn btn-small" onClick={() => setUpdating(complaint)}>Update</button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyAdminState text="No real complaints are currently assigned to this department." />
+              )}
+            </section>
+          </>
+        )}
+
+        {section === "workload" && (
+          <>
+            <div className="workspace-heading" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <p className="eyebrow">{label}</p>
+                <h1>Team workload</h1>
+                <p>Monitor task assignment and resource performance within the department.</p>
+              </div>
+              <button className="btn btn-primary" onClick={() => setAddModalOpen(true)}>＋ Add Officer</button>
+            </div>
+
+            <div className="metric-row">
+              <Metric label="Total Officers" value={dynamicOfficers.length} note="Assigned to department" />
+              <Metric label="Average Load" value={`${dynamicOfficers.length ? (complaints.filter(c => c.status !== "resolved").length / dynamicOfficers.length).toFixed(1) : 0} cases`} note="Per active officer" tone="blue" />
+              <Metric label="Highest Load" value={`${dynamicOfficers.length ? Math.max(...dynamicOfficers.map(o => o.cases)) : 0} cases`} note="Active assignment max" tone="coral" />
+              <Metric label="Avg Redressal" value="5.2 days" note="Target is <14 days" tone="green" />
+            </div>
+
+            <section className="workspace-section">
+              <div className="table-heading">
+                <div>
+                  <h2>Officer assignments</h2>
+                  <p>List of municipal officers active in this category.</p>
+                </div>
+              </div>
+              {dynamicOfficers.length ? (
+                <div className="data-table">
+                  <div className="table-row table-labels">
+                    <span>Officer Name</span>
+                    <span>Designation</span>
+                    <span>Status</span>
+                    <span>Active Cases</span>
+                    <span>SLA Performance</span>
+                    <span>Action</span>
+                  </div>
+                  {dynamicOfficers.map((officer) => (
+                    <div className="table-row" key={officer.id}>
+                      <span style={{ fontWeight: 600 }}>{officer.name}</span>
+                      <span>{officer.designation}</span>
+                      <span>
+                        {officer.status === "On Field" ? (
+                          <span className="status status-in_progress"><i />On Field</span>
+                        ) : officer.status === "Online" ? (
+                          <span className="status status-acknowledged"><i style={{ background: "var(--green)" }} />Online</span>
+                        ) : (
+                          <span className="status status-rejected"><i style={{ background: "var(--muted)" }} />Offline</span>
+                        )}
+                      </span>
+                      <span>{officer.cases} active</span>
+                      <span style={{ color: "var(--green)", fontWeight: 600 }}>{officer.performance}</span>
+                      <button 
+                        className="btn btn-small btn-outline" 
+                        style={{ color: "var(--coral)", borderColor: "rgba(220, 38, 38, 0.2)", cursor: "pointer" }} 
+                        onClick={() => setOfficers(officers.filter(o => o.id !== officer.id))}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ padding: "32px", textAlign: "center", color: "var(--muted)" }}>
+                  No officers assigned. Click "Add Officer" to assign staff to this department.
+                </div>
+              )}
+            </section>
+          </>
+        )}
+
+        {section === "activity" && (
+          <>
+            <div className="workspace-heading">
+              <div>
+                <p className="eyebrow">{label}</p>
+                <h1>Activity logs</h1>
+                <p>Chronological audit log of all updates made to complaints under this department.</p>
+              </div>
+            </div>
+
+            <section className="workspace-section">
+              <div className="table-heading">
+                <div>
+                  <h2>Department actions</h2>
+                  <p>Live audit trail from assigned cases.</p>
+                </div>
+              </div>
+              
+              {(() => {
+                const allLogs: { complaint: Complaint; oldStatus: string | null; newStatus: string; remarks: string; changedAt: string; changedBy: string }[] = [];
+                complaints.forEach((c) => {
+                  if (c.history && c.history.length) {
+                    c.history.forEach((h) => {
+                      allLogs.push({ complaint: c, ...h });
+                    });
+                  } else {
+                    allLogs.push({
+                      complaint: c,
+                      oldStatus: null,
+                      newStatus: c.status,
+                      remarks: c.status === "resolved" ? "Work completed and resolution verified." : "Complaint received and routed automatically.",
+                      changedAt: c.updatedAt || c.createdAt,
+                      changedBy: "System Router",
+                    });
+                  }
+                });
+                
+                allLogs.sort((a, b) => new Date(b.changedAt).getTime() - new Date(a.changedAt).getTime());
+                
+                if (allLogs.length) {
+                  return (
+                    <div className="activity-feed">
+                      {allLogs.slice(0, 15).map((log, idx) => (
+                        <button type="button" onClick={() => onSelect(log.complaint)} key={idx}>
+                          <CategoryBadge category={log.complaint.category} />
+                          <div>
+                            <b>{log.complaint.title}</b>
+                            <p>{log.changedBy} updated status to <strong>{statusLabels[log.newStatus] || log.newStatus}</strong>.</p>
+                            {log.remarks && <blockquote style={{ margin: "4px 0 0", fontSize: "12px", color: "var(--muted)", fontStyle: "italic" }}>&ldquo;{log.remarks}&rdquo;</blockquote>}
+                            <small>{formatDate(log.changedAt)} · {log.complaint.trackingId}</small>
+                          </div>
+                          <StatusPill status={log.newStatus} />
+                          <span>→</span>
+                        </button>
+                      ))}
+                    </div>
+                  );
+                }
+                
+                return <EmptyAdminState text="No updates have been made to complaints in this department yet." />;
+              })()}
+            </section>
+          </>
+        )}
+
+        {section === "settings" && (
+          <>
+            <div className="workspace-heading">
+              <div>
+                <p className="eyebrow">{label}</p>
+                <h1>Department settings</h1>
+                <p>Configure routing parameters, breach thresholds, and notification alerts for this portal.</p>
+              </div>
+            </div>
+
+            <section className="workspace-section" style={{ maxWidth: "600px" }}>
+              <form onSubmit={(e) => { e.preventDefault(); alert("Department configurations updated successfully."); }} style={{ display: "flex", flexDirection: "column", gap: "20px", padding: "20px 24px" }}>
+                
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={{ fontWeight: 600, fontSize: "14px", color: "var(--ink)", display: "flex", alignItems: "center", gap: "8px" }}>
+                    <input type="checkbox" defaultChecked style={{ width: "auto" }} />
+                    Auto-assign new complaints to nearest field inspector
+                  </label>
+                  <p style={{ margin: 0, fontSize: "12px", color: "var(--muted)", paddingLeft: "20px" }}>Matches coordinates with active field inspectors.</p>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={{ fontWeight: 600, fontSize: "14px", color: "var(--ink)", display: "flex", alignItems: "center", gap: "8px" }}>
+                    <input type="checkbox" defaultChecked style={{ width: "auto" }} />
+                    Send SLA breach warning notifications
+                  </label>
+                  <p style={{ margin: 0, fontSize: "12px", color: "var(--muted)", paddingLeft: "20px" }}>Triggers alerts to department head 24 hours prior to SLA expiry.</p>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={{ fontWeight: 600, fontSize: "14px", color: "var(--ink)" }}>Default SLA Redressal Target</label>
+                  <select defaultValue="14" style={{ padding: "8px 12px", borderRadius: "var(--radius)", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--ink)", width: "100%", outline: "none" }}>
+                    <option value="7">7 Days (Urgent priority)</option>
+                    <option value="14">14 Days (Standard redressal)</option>
+                    <option value="30">30 Days (Complex municipal work)</option>
+                  </select>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={{ fontWeight: 600, fontSize: "14px", color: "var(--ink)" }}>Notification Channels</label>
+                  <div style={{ display: "flex", gap: "16px", paddingLeft: "4px" }}>
+                    <label style={{ fontSize: "13px", display: "flex", alignItems: "center", gap: "6px" }}><input type="checkbox" defaultChecked /> Email alerts</label>
+                    <label style={{ fontSize: "13px", display: "flex", alignItems: "center", gap: "6px" }}><input type="checkbox" defaultChecked /> SMS notifications</label>
+                  </div>
+                </div>
+
+                <button type="submit" className="btn btn-primary" style={{ alignSelf: "flex-start", marginTop: "12px" }}>Save Configurations</button>
+              </form>
+            </section>
+          </>
+        )}
+      </main>
+      {updating && <UpdateModal complaint={updating} onClose={() => setUpdating(null)} onChanged={() => { setUpdating(null); onChanged(); }} />}
+      {addModalOpen && (
+        <AddOfficerModal 
+          onClose={() => setAddModalOpen(false)} 
+          onAdd={(name, designation, status) => {
+            const activeCasesCount = complaints.filter(c => c.status !== "resolved").length;
+            const newOfficer = {
+              id: Date.now().toString(),
+              name,
+              designation,
+              status,
+              cases: 0,
+              performance: `${90 + Math.floor(Math.random() * 11)}% on-time`
+            };
+            setOfficers([...officers, newOfficer]);
+            setAddModalOpen(false);
+          }}
+        />
+      )}
+    </div>
+  );
 }
 
 function AdminPortal({ complaints, onSelect, stats, departmentAccess, onChanged }: { complaints: Complaint[]; onSelect: (complaint: Complaint) => void; stats: { total: number; resolved: number; active: number; avgDays: number }; departmentAccess: DepartmentAccess[]; onChanged: () => void }) {
   const [section, setSection] = useState<AdminSection>("overview");
-  return <div className="portal-shell"><Sidebar portal="admin" active={section} onAdminNavigate={setSection} /><main className="workspace admin-workspace">
+  return <div className="portal-shell"><Sidebar portal="admin" active={section} onNavigate={setSection} /><main className="workspace admin-workspace">
     {section === "overview" && <AdminOverview complaints={complaints} stats={stats} departmentAccess={departmentAccess} onSelect={onSelect} onNavigate={setSection} />}
     {section === "complaints" && <AdminComplaintQueue complaints={complaints} onSelect={onSelect} />}
-    {section === "departments" && <AdminDepartments departmentAccess={departmentAccess} onChanged={onChanged} />}
+    {section === "departments" && <AdminDepartments departmentAccess={departmentAccess} complaints={complaints} onChanged={onChanged} />}
     {section === "activity" && <AdminActivity complaints={complaints} onSelect={onSelect} />}
     {section === "analytics" && <AdminAnalytics complaints={complaints} stats={stats} />}
   </main></div>;
@@ -253,7 +693,50 @@ function AdminComplaintRow({ complaint, onSelect }: { complaint: Complaint; onSe
 
 function AdminOverview({ complaints, stats, departmentAccess, onSelect, onNavigate }: { complaints: Complaint[]; stats: { total: number; resolved: number; active: number; avgDays: number }; departmentAccess: DepartmentAccess[]; onSelect: (complaint: Complaint) => void; onNavigate: (section: AdminSection) => void }) {
   const overdue = complaints.filter((item) => daysUntil(item.slaDueAt) < 0 && !["resolved", "rejected"].includes(item.status)).length;
-  return <><AdminPageHeading eyebrow="PLATFORM OVERSIGHT" title="Administrator control centre" copy="A live view of complaints, department ownership, progress, and service outcomes." /><div className="metric-row"><Metric label="All complaints" value={stats.total.toLocaleString("en-IN")} note="Platform lifetime" /><Metric label="Active workload" value={stats.active.toLocaleString("en-IN")} note="Still being handled" tone="blue" /><Metric label="SLA overdue" value={overdue} note="Requires intervention" tone="coral" /><Metric label="Resolution rate" value={`${stats.total ? Math.round((stats.resolved / stats.total) * 100) : 0}%`} note={`${departmentAccess.length || 5} departments`} tone="green" /></div><DepartmentPerformanceChart complaints={complaints} /><section className="workspace-section"><div className="table-heading"><div><h2>Recent complaints</h2><p>Latest activity across the platform.</p></div><button type="button" onClick={() => onNavigate("complaints")}>View complaint queue →</button></div>{complaints.length ? <div className="data-table"><AdminTableHeader />{complaints.slice(0, 6).map((complaint) => <AdminComplaintRow complaint={complaint} onSelect={onSelect} key={complaint.id} />)}</div> : <EmptyAdminState text="New citizen complaints will appear here as soon as they are filed." />}</section></>;
+  return (
+    <>
+      <div className="workspace-heading" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: "16px" }}>
+        <div>
+          <p className="eyebrow">PLATFORM OVERSIGHT</p>
+          <h1 style={{ margin: "4px 0" }}>Administrator control centre</h1>
+          <p style={{ margin: 0, color: "var(--muted)" }}>A live view of complaints, department ownership, progress, and service outcomes.</p>
+        </div>
+        <button 
+          type="button" 
+          onClick={() => onNavigate("departments")}
+          style={{ background: "none", border: "none", color: "var(--accent-2)", fontWeight: 700, fontSize: "12px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px", padding: "8px 0", fontFamily: "inherit" }}
+        >
+          Configure Credentials →
+        </button>
+      </div>
+
+      <div className="metric-row">
+        <Metric label="All complaints" value={stats.total.toLocaleString("en-IN")} note="Platform lifetime" />
+        <Metric label="Active workload" value={stats.active.toLocaleString("en-IN")} note="Still being handled" tone="blue" />
+        <Metric label="SLA overdue" value={overdue} note="Requires intervention" tone="coral" />
+        <Metric label="Resolution rate" value={`${stats.total ? Math.round((stats.resolved / stats.total) * 100) : 0}%`} note={`${departmentAccess.length || 5} departments`} tone="green" />
+      </div>
+
+      <DepartmentPerformanceChart complaints={complaints} />
+      <section className="workspace-section">
+        <div className="table-heading">
+          <div>
+            <h2>Recent complaints</h2>
+            <p>Latest activity across the platform.</p>
+          </div>
+          <button type="button" onClick={() => onNavigate("complaints")}>View complaint queue →</button>
+        </div>
+        {complaints.length ? (
+          <div className="data-table">
+            <AdminTableHeader />
+            {complaints.slice(0, 6).map((complaint) => <AdminComplaintRow complaint={complaint} onSelect={onSelect} key={complaint.id} />)}
+          </div>
+        ) : (
+          <EmptyAdminState text="New citizen complaints will appear here as soon as they are filed." />
+        )}
+      </section>
+    </>
+  );
 }
 
 function AdminComplaintQueue({ complaints, onSelect }: { complaints: Complaint[]; onSelect: (complaint: Complaint) => void }) {
@@ -317,7 +800,7 @@ function TrackModal({ onClose, onSelect }: { onClose: () => void; onSelect: (com
 }
 
 function ComplaintDetail({ complaint, onClose }: { complaint: Complaint; onClose: () => void }) {
-  const history = complaint.history ?? [{ oldStatus: null, newStatus: "submitted", remarks: "Complaint received and routed automatically.", changedAt: complaint.createdAt, changedBy: complaint.citizenName ?? "Citizen" }, ...(complaint.status !== "submitted" ? [{ oldStatus: "submitted", newStatus: complaint.status, remarks: complaint.status === "resolved" ? "Work completed and resolution verified." : "The department has reviewed this complaint.", changedAt: complaint.updatedAt, changedBy: "Department officer" }] : [])];
+  const history = complaint.history && complaint.history.length ? complaint.history : [{ oldStatus: null, newStatus: "submitted", remarks: "Complaint received and routed automatically.", changedAt: complaint.createdAt, changedBy: complaint.citizenName ?? "Citizen" }, ...(complaint.status !== "submitted" ? [{ oldStatus: "submitted", newStatus: complaint.status, remarks: complaint.status === "resolved" ? "Work completed and resolution verified." : "The department has reviewed this complaint.", changedAt: complaint.updatedAt, changedBy: "Department officer" }] : [])];
   return <Modal title={complaint.title} eyebrow={complaint.trackingId} onClose={onClose} wide><div className="detail-top"><CategoryBadge category={complaint.category} full /><StatusPill status={complaint.status} /></div><p className="detail-location">Location: {complaint.location}</p><StatusTimeline complaint={complaint} /><div className="detail-grid"><div><h3>Complaint details</h3><p>{complaint.description}</p><dl><div><dt>Citizen</dt><dd>{complaint.citizenName ?? "Citizen"}</dd></div>{complaint.citizenEmail && <div><dt>Email</dt><dd><a href={`mailto:${complaint.citizenEmail}`}>{complaint.citizenEmail}</a></dd></div>}{complaint.citizenPhone && <div><dt>Phone</dt><dd><a href={`tel:${complaint.citizenPhone}`}>{complaint.citizenPhone}</a></dd></div>}<div><dt>Assigned department</dt><dd>{complaint.department}</dd></div><div><dt>Filed on</dt><dd>{formatDate(complaint.createdAt)}</dd></div><div><dt>Priority</dt><dd>{complaint.priority}</dd></div><div><dt>SLA target</dt><dd>{formatDate(complaint.slaDueAt)}</dd></div></dl></div><div className="history"><h3>Action history</h3>{history.map((item, index) => <article key={`${item.changedAt}-${index}`}><i>{index + 1}</i><div><b>{statusLabels[item.newStatus]}</b><p>{item.remarks}</p><small>{formatDate(item.changedAt)} · {item.changedBy}</small></div></article>)}</div></div></Modal>;
 }
 
@@ -372,8 +855,32 @@ function Footer() {
   );
 }
 
-function AdminDepartments({ departmentAccess, onChanged }: { departmentAccess: DepartmentAccess[]; onChanged: () => void }) {
+function AdminDepartments({ departmentAccess, complaints, onChanged }: { departmentAccess: DepartmentAccess[]; complaints: Complaint[]; onChanged: () => void }) {
   const [configuring, setConfiguring] = useState<DepartmentAccess | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState("civic_infra");
+  const [currentOfficers, setCurrentOfficers] = useState<any[]>([]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function load() {
+      try {
+        const data = await fetchOfficers(selectedCategory);
+        if (!active) return;
+        setCurrentOfficers(data ?? []);
+      } catch (e) {
+        console.error("Failed to load officers from KV", e);
+        if (active) {
+          setCurrentOfficers([]);
+        }
+      }
+    }
+
+    void load();
+    return () => { active = false; };
+  }, [selectedCategory, complaints]);
+
+  const dynamicOfficers = computeDynamicOfficerStats(currentOfficers, complaints, selectedCategory);
 
   return (
     <>
@@ -418,6 +925,58 @@ function AdminDepartments({ departmentAccess, onChanged }: { departmentAccess: D
           </div>
         ) : (
           <EmptyAdminState text="No department configurations loaded." />
+        )}
+      </section>
+
+      {/* Officers Performance Check section */}
+      <section className="workspace-section" style={{ marginTop: "24px" }}>
+        <div className="table-heading" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+          <div>
+            <h2>Officer Performance Check</h2>
+            <p>Inspect assigned officers, status, workloads, and SLA compliance ratings for each department.</p>
+          </div>
+          <div>
+            <select 
+              value={selectedCategory} 
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              style={{ padding: "8px 12px", borderRadius: "var(--radius)", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--ink)", outline: "none", fontSize: "13px", fontWeight: 600 }}
+            >
+              {Object.entries(categoryMeta).map(([key, meta]) => (
+                <option value={key} key={key}>{meta.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        
+        {dynamicOfficers.length ? (
+          <div className="data-table">
+            <div className="table-row table-labels">
+              <span>Officer Name</span>
+              <span>Designation</span>
+              <span>Status</span>
+              <span>Caseload</span>
+              <span>SLA Performance</span>
+            </div>
+            {dynamicOfficers.map((officer: any) => (
+              <div className="table-row" key={officer.id}>
+                <span style={{ fontWeight: 600 }}>{officer.name}</span>
+                <span>{officer.designation}</span>
+                <span>
+                  {officer.status === "On Field" ? (
+                    <span className="status status-in_progress"><i />On Field</span>
+                  ) : officer.status === "Online" ? (
+                    <span className="status status-acknowledged"><i style={{ background: "var(--green)" }} />Online</span>
+                  ) : (
+                    <span className="status status-rejected"><i style={{ background: "var(--muted)" }} />Offline</span>
+                  )}
+                </span>
+                <span>{officer.cases} active cases</span>
+                <span style={{ color: "var(--green)", fontWeight: 600 }}>{officer.performance}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyAdminState text="No officers have been assigned to this department yet." />
         )}
       </section>
 
@@ -522,3 +1081,71 @@ function ConfigureCredentialsModal({ dept, onClose, onChanged }: { dept: Departm
     </Modal>
   );
 }
+
+function AddOfficerModal({ onClose, onAdd }: { onClose: () => void; onAdd: (name: string, designation: string, status: string) => void }) {
+  const [name, setName] = useState("");
+  const [designation, setDesignation] = useState("Field Inspector");
+  const [status, setStatus] = useState("Online");
+
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    onAdd(name.trim(), designation, status);
+  }
+
+  return (
+    <Modal title="Add Assigned Officer" eyebrow="TEAM MANAGEMENT" onClose={onClose}>
+      <form onSubmit={submit} className="complaint-form" style={{ display: "grid", gap: "16px" }}>
+        <p style={{ margin: 0, fontSize: "11px", color: "var(--muted)", lineHeight: 1.5 }}>
+          Assign a new municipal officer to this department to track their assignments and SLA compliance.
+        </p>
+        <label style={{ display: "grid", gap: "6px", fontWeight: "800", fontSize: "10px" }}>
+          Officer Name
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            placeholder="e.g. Ramesh Chandra"
+            style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--line)", borderRadius: "4px" }}
+          />
+        </label>
+        <label style={{ display: "grid", gap: "6px", fontWeight: "800", fontSize: "10px" }}>
+          Designation
+          <select
+            value={designation}
+            onChange={(e) => setDesignation(e.target.value)}
+            style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--line)", borderRadius: "4px", background: "var(--surface)", color: "var(--ink)" }}
+          >
+            <option value="Field Inspector">Field Inspector</option>
+            <option value="Senior Engineer">Senior Engineer</option>
+            <option value="Assistant Officer">Assistant Officer</option>
+            <option value="Public Relations Officer">Public Relations Officer</option>
+            <option value="Support Staff">Support Staff</option>
+          </select>
+        </label>
+        <label style={{ display: "grid", gap: "6px", fontWeight: "800", fontSize: "10px" }}>
+          Initial Status
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--line)", borderRadius: "4px", background: "var(--surface)", color: "var(--ink)" }}
+          >
+            <option value="Online">Online</option>
+            <option value="On Field">On Field</option>
+            <option value="Offline">Offline</option>
+          </select>
+        </label>
+        <div className="form-actions" style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "8px" }}>
+          <button type="button" className="btn btn-outline" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" className="btn btn-primary">
+            Add Officer
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
