@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import PublicLayout from "./PublicLayout";
-import { IconLock, IconCheck } from "./Icons";
+import { IconLock, IconCheck, IconCamera } from "./Icons";
 import { apiFetch, readJson } from "../api";
 
 type GalleryItem = {
@@ -78,9 +78,9 @@ export default function GalleryPage() {
             <button
               className={`filters ${filter === ALL_FILTER ? "active" : ""}`}
               style={{
-                border: filter === ALL_FILTER ? "none" : "1px solid var(--line)",
-                background: filter === ALL_FILTER ? "var(--ink)" : "white",
-                color: filter === ALL_FILTER ? "white" : "var(--ink)",
+                border: filter === ALL_FILTER ? "none" : "1px solid var(--border)",
+                background: filter === ALL_FILTER ? "var(--ink)" : "var(--surface-2)",
+                color: filter === ALL_FILTER ? "var(--bg)" : "var(--ink)",
                 padding: "9px 16px",
                 borderRadius: "20px",
                 fontSize: "10px",
@@ -96,9 +96,9 @@ export default function GalleryPage() {
                 key={cat}
                 onClick={() => setFilter(cat)}
                 style={{
-                  border: filter === cat ? "none" : "1px solid var(--line)",
-                  background: filter === cat ? "var(--ink)" : "white",
-                  color: filter === cat ? "white" : "var(--ink)",
+                  border: filter === cat ? "none" : "1px solid var(--border)",
+                  background: filter === cat ? "var(--ink)" : "var(--surface-2)",
+                  color: filter === cat ? "var(--bg)" : "var(--ink)",
                   padding: "9px 16px",
                   borderRadius: "20px",
                   fontSize: "10px",
@@ -125,12 +125,12 @@ export default function GalleryPage() {
           {/* Grid */}
           {displayed.length === 0 ? (
             <div className="gallery-empty">
-              <span>□</span>
+              <span><IconCamera size={48} /></span>
               <h3>No resolved cases found</h3>
               <p>
                 {filter !== ALL_FILTER
                   ? "No resolved complaints in this department yet. Try a different filter."
-                  : "Resolution evidence will appear here as departments close complaints with photo proof."}
+                  : "Resolution evidence will appear here as departments or administrators close complaints with photo proof."}
               </p>
             </div>
           ) : (
@@ -164,7 +164,7 @@ export default function GalleryPage() {
         </section>
 
         {/* Stats band */}
-        <div style={{ background: "var(--ink)", color: "white", padding: "70px clamp(24px,8vw,128px)" }}>
+        <div className="gallery-stats-band">
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "40px", maxWidth: "900px" }}>
             {[
               [String(apiItems.length), "Resolved cases published"],
@@ -173,7 +173,7 @@ export default function GalleryPage() {
             ].map(([stat, label]) => (
               <div key={label}>
                 <b style={{ display: "block", fontFamily: "var(--font-display, Georgia)", fontSize: "42px", fontWeight: 500, letterSpacing: "-.03em" }}>{stat}</b>
-                <span style={{ color: "#aeb8b3", fontSize: "10px", textTransform: "uppercase", letterSpacing: ".12em" }}>{label}</span>
+                <span style={{ fontSize: "10px", textTransform: "uppercase", letterSpacing: ".12em" }}>{label}</span>
               </div>
             ))}
           </div>

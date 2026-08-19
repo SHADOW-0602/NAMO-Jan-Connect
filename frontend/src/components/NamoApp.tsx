@@ -14,6 +14,7 @@ import { apiFetch, readJson, fetchOfficers, saveOfficers } from "../api";
 type Portal = "public" | "citizen" | "department" | "admin";
 type Complaint = {
   id: number; trackingId: string; title: string; description: string; location: string;
+  latitude?: number | null; longitude?: number | null;
   category: string; status: string; priority: string; createdAt: string; updatedAt: string;
   slaDueAt: string; department: string; departmentId: number; citizenName?: string; citizenEmail?: string; citizenPhone?: string;
   resolvedAt?: string | null;
@@ -160,7 +161,7 @@ export default function NamoApp({ initialPortal = "public" }: { initialPortal?: 
         {portal === "admin" && <AdminPortal complaints={complaints} onSelect={setSelected} stats={stats} departmentAccess={departmentAccess} onChanged={() => loadPortal("admin")} />}
         {fileOpen && <ComplaintForm onClose={() => setFileOpen(false)} onCreated={(trackingId) => { setFileOpen(false); setTrackOpen(true); sessionStorage.setItem("newTrackingId", trackingId); }} />}
         {trackOpen && <TrackModal onClose={() => setTrackOpen(false)} onSelect={(complaint) => { setTrackOpen(false); setSelected(complaint); }} />}
-        {selected && <ComplaintDetail complaint={selected} onClose={() => setSelected(null)} />}
+        {selected && <ComplaintDetail complaint={selected} portal={portal} onChanged={() => { loadPortal(portal); setSelected(null); }} onClose={() => setSelected(null)} />}
       </div>
     </LanguageProvider>
   );
@@ -178,7 +179,7 @@ function PublicHome({ stats, onFile, onTrack }: { stats: { total: number; resolv
     <section className="hero"><div className="hero-copy"><p className="eyebrow"><span>{t("hero.eyebrow")}</span></p><h1>{t("hero.h1_line1")}<br /><em>{t("hero.h1_em")}</em></h1><p className="hero-lede">{t("hero.lede")}</p><div className="hero-actions"><button className="btn btn-primary btn-large" onClick={onFile}>{t("hero.cta_file")} <span>↗</span></button><button className="btn btn-line btn-large" onClick={onTrack}>{t("hero.cta_track")} <span>→</span></button></div><div className="trust-note"><p><b>{t("hero.trust_note_title")}</b><small>{t("hero.trust_note_body")}</small></p></div></div><div className="hero-visual" aria-label="Complaint workflow"><div className="orbit orbit-one" /><div className="orbit orbit-two" /><div className="sample-card workflow-card"><p className="mono">{t("hero.workflow_label")}</p><h3>{t("hero.workflow_title")}</h3><div className="workflow-steps"><span>{t("hero.step_submitted")}</span><span>{t("hero.step_acknowledged")}</span><span>{t("hero.step_inprogress")}</span><span>{t("hero.step_resolved")}</span></div><div className="sample-update"><span>✓</span><p><b>{t("hero.update_title")}</b><small>{t("hero.update_body")}</small></p></div></div><div className="floating-note note-routed"><span>✓</span><p><b>{t("hero.routing_title")}</b><small>{t("hero.routing_body")}</small></p></div></div></section>
     <section className="proof-strip" id="transparency"><div><b>{stats.total.toLocaleString("en-IN")}</b><span>{t("stats.filed")}</span></div><div><b>{stats.resolved.toLocaleString("en-IN")}</b><span>{t("stats.resolved")}</span></div><div><b>{stats.active.toLocaleString("en-IN")}</b><span>{t("stats.active")}</span></div><div><b>{stats.avgDays > 0 ? stats.avgDays : "—"}</b><span>{t("stats.avg_days")}</span></div></section>
     <section className="how" id="how"><div className="section-intro"><p className="eyebrow">{t("how.eyebrow")}</p><h2>{t("how.h2_line1")}<br /><em>{t("how.h2_em")}</em></h2><p>{t("how.intro")}</p></div><div className="steps"><article><span className="step-number">01</span><div className="step-icon">✎</div><h3>{t("how.step1_title")}</h3><p>{t("how.step1_body")}</p></article><article><span className="step-number">02</span><div className="step-icon">◎</div><h3>{t("how.step2_title")}</h3><p>{t("how.step2_body")}</p></article><article><span className="step-number">03</span><div className="step-icon">✓</div><h3>{t("how.step3_title")}</h3><p>{t("how.step3_body")}</p></article></div></section>
-    <section className="categories"><div className="category-copy"><p className="eyebrow">{t("cat.eyebrow")}</p><h2>{t("cat.h2_line1")}<br /><em>{t("cat.h2_em")}</em></h2></div><div className="category-grid">{Object.entries(categoryMeta).map(([key, meta]) => <article key={key} className={`category-card tone-${meta.tone}`}><span>{meta.mark}</span><h3>{meta.label}</h3><p>{t(`cat.${key}`)}</p><button onClick={onFile} aria-label={`File under ${meta.label}`}>→</button></article>)}</div></section>
+    <section className="categories"><div className="category-copy"><p className="eyebrow">{t("cat.eyebrow")}</p><h2>{t("cat.h2_line1")}<br /><em>{t("cat.h2_em")}</em></h2></div><div className="category-grid">{Object.entries(categoryMeta).map(([key, meta]) => <article key={key} className={`category-card tone-${meta.tone}`}><span>{meta.mark}</span><h3>{meta.label}</h3><p>{t(`cat.${key}`)}</p></article>)}</div></section>
     <section className="home-gallery reveal-on-view"><div className="gallery-home-heading"><div><p className="eyebrow">{t("gallery.eyebrow")}</p><h2>{t("gallery.h2_line1")}<br /><em>{t("gallery.h2_em")}</em></h2></div><div><p>{t("gallery.body")}</p><a className="text-link" href="/gallery">{t("gallery.link")}</a></div></div><ResolvedGallery compact /></section>
     <section className="transparency"><div className="transparency-card"><div><p className="eyebrow">{t("trans.eyebrow")}</p><h2>{t("trans.h2_line1")} <em>{t("trans.h2_em")}</em></h2><p>{t("trans.body")}</p><button className="btn btn-light" onClick={() => window.location.href = "/dashboard"}>{t("trans.cta")}</button></div><div className="mini-chart"><div className="chart-head"><p><small>{t("trans.rate_label")}</small><b>{resolutionRate}%</b></p><span>{t("trans.live")}</span></div><div className="bars"><i style={{ height: `${Math.max(resolutionRate, 2)}%` }} /></div><div className="chart-foot"><span>{stats.resolved.toLocaleString("en-IN")} {t("trans.resolved_count")}</span><span>{stats.total.toLocaleString("en-IN")} {t("trans.filed_count")}</span></div></div></div></section>
     <section className="final-cta"><p className="eyebrow">{t("cta.eyebrow")}</p><h2>{t("cta.h2_line1")}<br />{t("cta.h2_line2")} <em>{t("cta.h2_em")}</em></h2><button className="btn btn-primary btn-large" onClick={onFile}>{t("cta.btn")} <span>↗</span></button></section>
@@ -636,7 +637,7 @@ function DepartmentPortal({ complaints, onSelect, onChanged }: { complaints: Com
           </>
         )}
       </main>
-      {updating && <UpdateModal complaint={updating} onClose={() => setUpdating(null)} onChanged={() => { setUpdating(null); onChanged(); }} />}
+      {updating && <UpdateModal complaint={updating} portal="department" onClose={() => setUpdating(null)} onChanged={() => { setUpdating(null); onChanged(); }} />}
       {addModalOpen && (
         <AddOfficerModal 
           onClose={() => setAddModalOpen(false)} 
@@ -799,14 +800,154 @@ function TrackModal({ onClose, onSelect }: { onClose: () => void; onSelect: (com
   return <Modal title="Track a complaint" eyebrow="PUBLIC TRACKING" onClose={onClose}><p className="modal-lede">Enter the tracking ID issued after your complaint was submitted.</p><form className="track-form" onSubmit={search}><input value={tracking} onChange={(event) => setTracking(event.target.value)} placeholder="Enter your tracking ID" aria-label="Complaint tracking ID" required /><button className="btn btn-primary" disabled={busy}>{busy ? "Finding..." : "Track →"}</button></form>{error && <p className="form-error">{error}</p>}{result && <button className="track-result" onClick={() => onSelect(result)}><div><CategoryBadge category={result.category} /><StatusPill status={result.status} /></div><p className="mono">{result.trackingId}</p><h3>{result.title}</h3><StatusTimeline complaint={result} /><span>Open full timeline →</span></button>}</Modal>;
 }
 
-function ComplaintDetail({ complaint, onClose }: { complaint: Complaint; onClose: () => void }) {
+function ComplaintDetail({ complaint, portal, onChanged, onClose }: { complaint: Complaint; portal?: Portal; onChanged?: () => void; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const [updating, setUpdating] = useState(false);
   const history = complaint.history && complaint.history.length ? complaint.history : [{ oldStatus: null, newStatus: "submitted", remarks: "Complaint received and routed automatically.", changedAt: complaint.createdAt, changedBy: complaint.citizenName ?? "Citizen" }, ...(complaint.status !== "submitted" ? [{ oldStatus: "submitted", newStatus: complaint.status, remarks: complaint.status === "resolved" ? "Work completed and resolution verified." : "The department has reviewed this complaint.", changedAt: complaint.updatedAt, changedBy: "Department officer" }] : [])];
-  return <Modal title={complaint.title} eyebrow={complaint.trackingId} onClose={onClose} wide><div className="detail-top"><CategoryBadge category={complaint.category} full /><StatusPill status={complaint.status} /></div><p className="detail-location">Location: {complaint.location}</p><StatusTimeline complaint={complaint} /><div className="detail-grid"><div><h3>Complaint details</h3><p>{complaint.description}</p><dl><div><dt>Citizen</dt><dd>{complaint.citizenName ?? "Citizen"}</dd></div>{complaint.citizenEmail && <div><dt>Email</dt><dd><a href={`mailto:${complaint.citizenEmail}`}>{complaint.citizenEmail}</a></dd></div>}{complaint.citizenPhone && <div><dt>Phone</dt><dd><a href={`tel:${complaint.citizenPhone}`}>{complaint.citizenPhone}</a></dd></div>}<div><dt>Assigned department</dt><dd>{complaint.department}</dd></div><div><dt>Filed on</dt><dd>{formatDate(complaint.createdAt)}</dd></div><div><dt>Priority</dt><dd>{complaint.priority}</dd></div><div><dt>SLA target</dt><dd>{formatDate(complaint.slaDueAt)}</dd></div></dl></div><div className="history"><h3>Action history</h3>{history.map((item, index) => <article key={`${item.changedAt}-${index}`}><i>{index + 1}</i><div><b>{statusLabels[item.newStatus]}</b><p>{item.remarks}</p><small>{formatDate(item.changedAt)} · {item.changedBy}</small></div></article>)}</div></div></Modal>;
+  
+  const hasCoords = complaint.latitude != null && complaint.longitude != null;
+  const mapQuery = hasCoords 
+    ? `${complaint.latitude},${complaint.longitude}` 
+    : encodeURIComponent(complaint.location);
+  const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${mapQuery}`;
+  const searchUrl = `https://www.google.com/maps/search/?api=1&query=${mapQuery}`;
+
+  const handleShare = () => {
+    const shareText = `Complaint: ${complaint.title}\nLocation: ${complaint.location}\nTracking ID: ${complaint.trackingId}`;
+    if (navigator.share) {
+      navigator.share({
+        title: complaint.title,
+        text: shareText,
+        url: searchUrl,
+      }).catch(() => {
+        copyFallback(shareText);
+      });
+    } else {
+      copyFallback(shareText);
+    }
+  };
+
+  const copyFallback = (text: string) => {
+    navigator.clipboard.writeText(`${text}\n${searchUrl}`).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  const showUpdateBtn = portal === "admin" || portal === "department";
+
+  return (
+    <>
+      <Modal title={complaint.title} eyebrow={complaint.trackingId} onClose={onClose} wide>
+        <div className="detail-top">
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <CategoryBadge category={complaint.category} full />
+            <StatusPill status={complaint.status} />
+          </div>
+          {showUpdateBtn && (
+            <button className="btn btn-primary btn-small" onClick={() => setUpdating(true)}>
+              Update status
+            </button>
+          )}
+        </div>
+        <div className="detail-location-container">
+          <p className="detail-location">Location: {complaint.location}</p>
+          <div className="detail-location-actions">
+            <a href={directionsUrl} target="_blank" rel="noopener noreferrer" className="btn-location-action" title="Get directions on Google Maps">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="location-action-icon">
+                <polygon points="3 11 22 2 13 21 11 13 3 11"/>
+              </svg>
+              Get Directions
+            </a>
+            <button onClick={handleShare} className="btn-location-action" title="Share location link">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="location-action-icon">
+                <circle cx="18" cy="5" r="3"/>
+                <circle cx="6" cy="12" r="3"/>
+                <circle cx="18" cy="19" r="3"/>
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+              </svg>
+              {copied ? "Copied!" : "Share Location"}
+            </button>
+          </div>
+        </div>
+        <StatusTimeline complaint={complaint} />
+        <div className="detail-grid">
+          <div>
+            <h3>Complaint details</h3>
+            <p>{complaint.description}</p>
+            <dl>
+              <div>
+                <dt>Citizen</dt>
+                <dd>{complaint.citizenName ?? "Citizen"}</dd>
+              </div>
+              {complaint.citizenEmail && (
+                <div>
+                  <dt>Email</dt>
+                  <dd>
+                    <a href={`mailto:${complaint.citizenEmail}`}>{complaint.citizenEmail}</a>
+                  </dd>
+                </div>
+              )}
+              {complaint.citizenPhone && (
+                <div>
+                  <dt>Phone</dt>
+                  <dd>
+                    <a href={`tel:${complaint.citizenPhone}`}>{complaint.citizenPhone}</a>
+                  </dd>
+                </div>
+              )}
+              <div>
+                <dt>Assigned department</dt>
+                <dd>{complaint.department}</dd>
+              </div>
+              <div>
+                <dt>Filed on</dt>
+                <dd>{formatDate(complaint.createdAt)}</dd>
+              </div>
+              <div>
+                <dt>Priority</dt>
+                <dd>{complaint.priority}</dd>
+              </div>
+              <div>
+                <dt>SLA target</dt>
+                <dd>{formatDate(complaint.slaDueAt)}</dd>
+              </div>
+            </dl>
+          </div>
+          <div className="history">
+            <h3>Action history</h3>
+            {history.map((item, index) => (
+              <article key={`${item.changedAt}-${index}`}>
+                <i>{index + 1}</i>
+                <div>
+                  <b>{statusLabels[item.newStatus]}</b>
+                  <p>{item.remarks}</p>
+                  <small>{formatDate(item.changedAt)} · {item.changedBy}</small>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </Modal>
+      {updating && (
+        <UpdateModal
+          complaint={complaint}
+          portal={portal || "department"}
+          onClose={() => setUpdating(false)}
+          onChanged={() => {
+            setUpdating(false);
+            if (onChanged) onChanged();
+          }}
+        />
+      )}
+    </>
+  );
 }
 
-function UpdateModal({ complaint, onClose, onChanged }: { complaint: Complaint; onClose: () => void; onChanged: () => void }) {
+function UpdateModal({ complaint, portal, onClose, onChanged }: { complaint: Complaint; portal: Portal; onClose: () => void; onChanged: () => void }) {
   const [status, setStatus] = useState(nextStatuses[complaint.status]?.[0] ?? ""); const [remarks, setRemarks] = useState(""); const [error, setError] = useState(""); const [busy, setBusy] = useState(false); const [photo, setPhoto] = useState<File | null>(null);
-  async function submit(event: FormEvent) { event.preventDefault(); setBusy(true); setError(""); try { const form = new FormData(); form.set("complaintId", String(complaint.id)); form.set("status", status); form.set("remarks", remarks); if (photo) form.set("resolutionPhoto", photo); const response = await apiFetch("/api/complaints", { method: "PATCH", headers: demoHeaders("department"), body: form }); const data = await readJson<any>(response); if (!response.ok) throw new Error(data.error); onChanged(); } catch (caught) { setError(caught instanceof Error ? caught.message : "Update failed"); } finally { setBusy(false); } }
+  async function submit(event: FormEvent) { event.preventDefault(); setBusy(true); setError(""); try { const form = new FormData(); form.set("complaintId", String(complaint.id)); form.set("status", status); form.set("remarks", remarks); if (photo) form.set("resolutionPhoto", photo); const response = await apiFetch("/api/complaints", { method: "PATCH", headers: demoHeaders(portal), body: form }); const data = await readJson<any>(response); if (!response.ok) throw new Error(data.error); onChanged(); } catch (caught) { setError(caught instanceof Error ? caught.message : "Update failed"); } finally { setBusy(false); } }
   return <Modal title="Update complaint" eyebrow={complaint.trackingId} onClose={onClose}><p className="modal-lede">This update will appear on the citizen&apos;s timeline and queue an email notification.</p><form className="update-form" onSubmit={submit}><label>New status<select value={status} onChange={(event) => setStatus(event.target.value)}>{(nextStatuses[complaint.status] ?? []).map((item) => <option key={item} value={item}>{statusLabels[item]}</option>)}</select></label><label>Public remark<textarea value={remarks} onChange={(event) => setRemarks(event.target.value)} minLength={5} required rows={4} placeholder="Explain what was done or what happens next..." /></label>{status === "resolved" && <label className="resolution-upload">Resolution photo <small>Published in the solved gallery when appropriate</small><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setPhoto(event.target.files?.[0] ?? null)} />{photo && <b>✓ {photo.name}</b>}</label>}{error && <p className="form-error">{error}</p>}<button className="btn btn-primary" disabled={busy}>{busy ? "Saving..." : "Publish update →"}</button></form></Modal>;
 }
 
