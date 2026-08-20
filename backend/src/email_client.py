@@ -1,6 +1,6 @@
 import json
 
-async def send_smtp_email(env, recipient_email: str, subject: str, body_text: str):
+async def send_smtp_email(env, recipient_email: str, subject: str, body_text: str, body_html: str = None):
     smtp_user = getattr(env, "SMTP_USER", None)
     smtp_pass = getattr(env, "SMTP_PASS", None)
     
@@ -15,6 +15,9 @@ async def send_smtp_email(env, recipient_email: str, subject: str, body_text: st
         "subject": subject,
         "body": body_text
     }
+    if body_html:
+        payload["html"] = body_html
+
 
     url = "https://namo-jan-connect-email.kushagra-singh0602.workers.dev"
 
