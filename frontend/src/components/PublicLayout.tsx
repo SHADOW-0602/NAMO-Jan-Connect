@@ -1,6 +1,7 @@
 import AccessibilityBar from "./AccessibilityBar";
 import GovHeader from "./GovHeader";
 import TickerBanner from "./TickerBanner";
+import Footer from "./Footer";
 import { LanguageProvider } from "../context/LanguageContext";
 
 interface PublicLayoutProps {
@@ -11,7 +12,7 @@ interface PublicLayoutProps {
 
 /**
  * Shared government-style layout wrapper used by every public-facing page.
- * Renders: LanguageProvider > tricolor stripe > AccessibilityBar > GovHeader > TickerBanner > {children}
+ * Renders: LanguageProvider > tricolor stripe > AccessibilityBar > GovHeader > TickerBanner > {children} > Footer
  */
 export default function PublicLayout({ children, activePath = "/" }: PublicLayoutProps) {
   return (
@@ -22,6 +23,7 @@ export default function PublicLayout({ children, activePath = "/" }: PublicLayou
         <GovHeader activePath={activePath} />
         <TickerBanner />
         {children}
+        <Footer />
       </div>
     </LanguageProvider>
   );

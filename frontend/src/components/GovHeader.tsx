@@ -97,6 +97,10 @@ export default function GovHeader({ onTrack, onFile, activePath = "/" }: GovHead
               <ChevronRight size={14} />
             </button>
           )}
+          <a href="/dashboard" style={{ padding: "10px 12px", fontSize: "13px", fontWeight: 600, color: "var(--ink)", borderRadius: "4px", display: "flex", alignItems: "center", justifyContent: "space-between" }} onClick={() => setMenuOpen(false)}>
+            {t("nav.officer_login")}
+            <ChevronRight size={14} />
+          </a>
           {onFile && (
             <button type="button" className="btn btn-primary" onClick={() => { onFile(); setMenuOpen(false); }} style={{ marginTop: "8px", width: "100%" }}>
               {t("nav.lodge")}

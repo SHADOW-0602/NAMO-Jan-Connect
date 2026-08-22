@@ -100,7 +100,7 @@ export default function AboutPage() {
           <div className="principle-grid reveal-on-view">
             {values.map((v, i) => (
               <article key={v.title}>
-                <span style={{ color: "var(--orange)", fontFamily: "var(--font-display, Georgia)", fontSize: "24px" }}>0{i + 1}</span>
+                <span style={{ color: "var(--accent-2)", fontFamily: "var(--font-display, Georgia)", fontSize: "24px" }}>0{i + 1}</span>
                 {/* SVG icon in a tinted circle */}
                 <div style={{
                   width: "48px", height: "48px", borderRadius: "50%",
@@ -108,7 +108,7 @@ export default function AboutPage() {
                   alignItems: "center", justifyContent: "center",
                   margin: "18px 0 16px",
                 }}>
-                  <v.Icon size={22} color="var(--orange)" />
+                  <v.Icon size={22} color="var(--accent-2)" />
                 </div>
                 <h3 style={{ margin: "0 0 10px" }}>{v.title}</h3>
                 <p>{v.body}</p>

@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import ThemeToggle, { ThemeToggleInline } from "./ThemeToggle";
+import Footer from "./Footer";
 import LocationPicker from "./LocationPicker";
 import ResolvedGallery from "./ResolvedGallery";
 import AccessibilityBar from "./AccessibilityBar";
@@ -10,6 +11,28 @@ import TickerBanner from "./TickerBanner";
 import Modal from "./Modal";
 import { LanguageProvider, useLanguage } from "../context/LanguageContext";
 import { apiFetch, readJson, fetchOfficers, saveOfficers } from "../api";
+import { 
+  FileEdit, 
+  Cpu, 
+  CheckCircle2, 
+  FileText, 
+  AlertCircle, 
+  TrendingUp, 
+  Check, 
+  Settings, 
+  List, 
+  Users, 
+  BarChart3, 
+  Clock, 
+  AlertTriangle, 
+  ArrowRight,
+  ChevronRight,
+  LogOut,
+  User,
+  Plus,
+  Building2,
+  Activity
+} from "lucide-react";
 
 type Portal = "public" | "citizen" | "department" | "admin";
 type Complaint = {
@@ -178,10 +201,10 @@ function PublicHome({ stats, onFile, onTrack }: { stats: { total: number; resolv
   return <main>
     <section className="hero"><div className="hero-copy"><p className="eyebrow"><span>{t("hero.eyebrow")}</span></p><h1>{t("hero.h1_line1")}<br /><em>{t("hero.h1_em")}</em></h1><p className="hero-lede">{t("hero.lede")}</p><div className="hero-actions"><button className="btn btn-primary btn-large" onClick={onFile}>{t("hero.cta_file")} <span>↗</span></button><button className="btn btn-line btn-large" onClick={onTrack}>{t("hero.cta_track")} <span>→</span></button></div><div className="trust-note"><p><b>{t("hero.trust_note_title")}</b><small>{t("hero.trust_note_body")}</small></p></div></div><div className="hero-visual" aria-label="Complaint workflow"><div className="orbit orbit-one" /><div className="orbit orbit-two" /><div className="sample-card workflow-card"><p className="mono">{t("hero.workflow_label")}</p><h3>{t("hero.workflow_title")}</h3><div className="workflow-steps"><span>{t("hero.step_submitted")}</span><span>{t("hero.step_acknowledged")}</span><span>{t("hero.step_inprogress")}</span><span>{t("hero.step_resolved")}</span></div><div className="sample-update"><span>✓</span><p><b>{t("hero.update_title")}</b><small>{t("hero.update_body")}</small></p></div></div><div className="floating-note note-routed"><span>✓</span><p><b>{t("hero.routing_title")}</b><small>{t("hero.routing_body")}</small></p></div></div></section>
     <section className="proof-strip" id="transparency"><div><b>{stats.total.toLocaleString("en-IN")}</b><span>{t("stats.filed")}</span></div><div><b>{stats.resolved.toLocaleString("en-IN")}</b><span>{t("stats.resolved")}</span></div><div><b>{stats.active.toLocaleString("en-IN")}</b><span>{t("stats.active")}</span></div><div><b>{stats.avgDays > 0 ? stats.avgDays : "—"}</b><span>{t("stats.avg_days")}</span></div></section>
-    <section className="how" id="how"><div className="section-intro"><p className="eyebrow">{t("how.eyebrow")}</p><h2>{t("how.h2_line1")}<br /><em>{t("how.h2_em")}</em></h2><p>{t("how.intro")}</p></div><div className="steps"><article><span className="step-number">01</span><div className="step-icon">✎</div><h3>{t("how.step1_title")}</h3><p>{t("how.step1_body")}</p></article><article><span className="step-number">02</span><div className="step-icon">◎</div><h3>{t("how.step2_title")}</h3><p>{t("how.step2_body")}</p></article><article><span className="step-number">03</span><div className="step-icon">✓</div><h3>{t("how.step3_title")}</h3><p>{t("how.step3_body")}</p></article></div></section>
+    <section className="how" id="how"><div className="section-intro"><p className="eyebrow">{t("how.eyebrow")}</p><h2>{t("how.h2_line1")}<br /><em>{t("how.h2_em")}</em></h2><p>{t("how.intro")}</p></div><div className="steps"><article><span className="step-number">01</span><div className="step-icon"><FileEdit size={24} /></div><h3>{t("how.step1_title")}</h3><p>{t("how.step1_body")}</p></article><article><span className="step-number">02</span><div className="step-icon"><Cpu size={24} /></div><h3>{t("how.step2_title")}</h3><p>{t("how.step2_body")}</p></article><article><span className="step-number">03</span><div className="step-icon"><CheckCircle2 size={24} /></div><h3>{t("how.step3_title")}</h3><p>{t("how.step3_body")}</p></article></div></section>
     <section className="categories"><div className="category-copy"><p className="eyebrow">{t("cat.eyebrow")}</p><h2>{t("cat.h2_line1")}<br /><em>{t("cat.h2_em")}</em></h2></div><div className="category-grid">{Object.entries(categoryMeta).map(([key, meta]) => <article key={key} className={`category-card tone-${meta.tone}`}><span>{meta.mark}</span><h3>{meta.label}</h3><p>{t(`cat.${key}`)}</p></article>)}</div></section>
     <section className="home-gallery reveal-on-view"><div className="gallery-home-heading"><div><p className="eyebrow">{t("gallery.eyebrow")}</p><h2>{t("gallery.h2_line1")}<br /><em>{t("gallery.h2_em")}</em></h2></div><div><p>{t("gallery.body")}</p><a className="text-link" href="/gallery">{t("gallery.link")}</a></div></div><ResolvedGallery compact /></section>
-    <section className="transparency"><div className="transparency-card"><div><p className="eyebrow">{t("trans.eyebrow")}</p><h2>{t("trans.h2_line1")} <em>{t("trans.h2_em")}</em></h2><p>{t("trans.body")}</p><button className="btn btn-light" onClick={() => window.location.href = "/dashboard"}>{t("trans.cta")}</button></div><div className="mini-chart"><div className="chart-head"><p><small>{t("trans.rate_label")}</small><b>{resolutionRate}%</b></p><span>{t("trans.live")}</span></div><div className="bars"><i style={{ height: `${Math.max(resolutionRate, 2)}%` }} /></div><div className="chart-foot"><span>{stats.resolved.toLocaleString("en-IN")} {t("trans.resolved_count")}</span><span>{stats.total.toLocaleString("en-IN")} {t("trans.filed_count")}</span></div></div></div></section>
+    <section className="transparency"><div className="transparency-card"><div><p className="eyebrow">{t("trans.eyebrow")}</p><h2>{t("trans.h2_line1")} <em>{t("trans.h2_em")}</em></h2><p>{t("trans.body")}</p></div><div className="mini-chart"><div className="chart-head"><p><small>{t("trans.rate_label")}</small><b>{resolutionRate}%</b></p><span>{t("trans.live")}</span></div><div className="bars"><i style={{ height: `${Math.max(resolutionRate, 2)}%` }} /></div><div className="chart-foot"><span>{stats.resolved.toLocaleString("en-IN")} {t("trans.resolved_count")}</span><span>{stats.total.toLocaleString("en-IN")} {t("trans.filed_count")}</span></div></div></div></section>
     <section className="final-cta"><p className="eyebrow">{t("cta.eyebrow")}</p><h2>{t("cta.h2_line1")}<br />{t("cta.h2_line2")} <em>{t("cta.h2_em")}</em></h2><button className="btn btn-primary btn-large" onClick={onFile}>{t("cta.btn")} <span>↗</span></button></section>
     <Footer />
   </main>;
@@ -235,25 +258,26 @@ function PortalHeader({ portal, setPortal }: { portal: Portal; setPortal: (porta
 
 function Sidebar({ portal, active = "overview", onNavigate }: { portal: Portal; active?: string; onNavigate?: (section: any) => void }) {
   if (portal === "admin") {
-    const items: { key: AdminSection; icon: string; label: string }[] = [
-      { key: "overview", icon: "OV", label: "Overview" }, { key: "complaints", icon: "CQ", label: "Complaints" },
-      { key: "departments", icon: "DP", label: "Departments" },
-      { key: "activity", icon: "AC", label: "Activity" },
-      { key: "analytics", icon: "AN", label: "Analytics" },
+    const items: { key: AdminSection; icon: React.ReactNode; label: string }[] = [
+      { key: "overview", icon: <BarChart3 size={16} />, label: "Overview" }, 
+      { key: "complaints", icon: <FileText size={16} />, label: "Complaints" },
+      { key: "departments", icon: <Building2 size={16} />, label: "Departments" },
+      { key: "activity", icon: <Activity size={16} />, label: "Activity" },
+      { key: "analytics", icon: <TrendingUp size={16} />, label: "Analytics" },
     ];
     return <aside className="sidebar admin-sidebar"><nav aria-label="Administrator sections">{items.map((item) => <button key={item.key} type="button" className={active === item.key ? "active" : ""} onClick={() => onNavigate?.(item.key)}><span>{item.icon}</span>{item.label}</button>)}</nav></aside>;
   }
   if (portal === "department") {
     const items = [
-      { key: "overview", icon: "OV", label: "Overview" },
-      { key: "queue", icon: "CQ", label: "Complaint queue" },
-      { key: "workload", icon: "TW", label: "Team workload" },
-      { key: "activity", icon: "AC", label: "Activity" },
-      { key: "settings", icon: "ST", label: "Settings" }
+      { key: "overview", icon: <BarChart3 size={16} />, label: "Overview" },
+      { key: "queue", icon: <FileText size={16} />, label: "Complaint queue" },
+      { key: "workload", icon: <Users size={16} />, label: "Team workload" },
+      { key: "activity", icon: <Activity size={16} />, label: "Activity" },
+      { key: "settings", icon: <Settings size={16} />, label: "Settings" }
     ];
     return <aside className="sidebar"><nav aria-label="Department sections">{items.map((item) => <button key={item.key} type="button" className={active === item.key ? "active" : ""} onClick={() => onNavigate?.(item.key)}><span>{item.icon}</span>{item.label}</button>)}</nav><div className="sidebar-help"><span>?</span><b>Need assistance?</b><p>Read the portal guide or contact support.</p><a href="mailto:kushagra.singh0602@gmail.com">Get help →</a></div></aside>;
   }
-  return <aside className="sidebar"><nav><button className="active"><span>OV</span>Overview</button><button><span>CQ</span>{portal === "citizen" ? "My complaints" : "Complaint queue"}</button>{portal !== "citizen" && <button><span>TW</span>Team workload</button>}<button><span>AC</span>Activity</button><button><span>ST</span>Settings</button></nav><div className="sidebar-help"><span>?</span><b>Need assistance?</b><p>Read the portal guide or contact support.</p><a href="mailto:kushagra.singh0602@gmail.com">Get help →</a></div></aside>;
+  return <aside className="sidebar"><nav><button className="active"><span><BarChart3 size={16} /></span>Overview</button><button><span><FileText size={16} /></span>{portal === "citizen" ? "My complaints" : "Complaint queue"}</button>{portal !== "citizen" && <button><span><Users size={16} /></span>Team workload</button>}<button><span><Activity size={16} /></span>Activity</button><button><span><Settings size={16} /></span>Settings</button></nav><div className="sidebar-help"><span>?</span><b>Need assistance?</b><p>Read the portal guide or contact support.</p><a href="mailto:kushagra.singh0602@gmail.com">Get help →</a></div></aside>;
 }
 
 function CitizenPortal({ complaints, onFile, onSelect }: { complaints: Complaint[]; onFile: () => void; onSelect: (complaint: Complaint) => void }) {
@@ -760,7 +784,8 @@ function AdminAnalytics({ complaints, stats }: { complaints: Complaint[]; stats:
 function ComplaintForm({ onClose, onCreated }: { onClose: () => void; onCreated: (trackingId: string) => void }) {
   const [step, setStep] = useState(1); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [files, setFiles] = useState<File[]>([]);
   const [successData, setSuccessData] = useState<{ trackingId: string; email?: string } | null>(null);
-  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (step < 2) { setStep(2); return; } setBusy(true); setError(""); try { const form = new FormData(event.currentTarget); const email = form.get("citizenEmail")?.toString().trim() || ""; files.forEach((file) => form.append("evidence", file)); const response = await apiFetch("/api/complaints", { method: "POST", body: form }); const data = await readJson<any>(response); if (!response.ok) throw new Error(data.error); setSuccessData({ trackingId: data.trackingId, email: email || undefined }); } catch (caught) { setError(caught instanceof Error ? caught.message : "Could not submit complaint"); } finally { setBusy(false); } }
+  const [selectedLang, setSelectedLang] = useState("English");
+  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (step < 2) { setStep(2); return; } setBusy(true); setError(""); try { const form = new FormData(event.currentTarget); const email = form.get("citizenEmail")?.toString().trim() || ""; const rawDesc = form.get("description")?.toString() || ""; form.set("description", `[Language: ${selectedLang}]\n${rawDesc}`); files.forEach((file) => form.append("evidence", file)); const response = await apiFetch("/api/complaints", { method: "POST", body: form }); const data = await readJson<any>(response); if (!response.ok) throw new Error(data.error); setSuccessData({ trackingId: data.trackingId, email: email || undefined }); } catch (caught) { setError(caught instanceof Error ? caught.message : "Could not submit complaint"); } finally { setBusy(false); } }
   if (successData) {
     return (
       <Modal title="Submission Successful" eyebrow="NAMO JAN CONNECT" onClose={() => { onCreated(successData.trackingId); }}>
@@ -790,7 +815,7 @@ function ComplaintForm({ onClose, onCreated }: { onClose: () => void; onCreated:
       </Modal>
     );
   }
-  return <Modal title="File a complaint" eyebrow="NO ACCOUNT OR LOGIN REQUIRED" onClose={onClose} wide><p className="no-login-note">Your contact details let the department send updates. They are never displayed in the public gallery.</p><div className="form-progress"><span className="active"><i>1</i>Contact & concern</span><em /><span className={step >= 2 ? "active" : ""}><i>2</i>Evidence & review</span></div><form className="complaint-form" onSubmit={submit}><div className={step === 1 ? "form-step" : "form-step hidden"}><div className="contact-fields"><label>Your name<input name="citizenName" minLength={2} maxLength={100} required placeholder="Full name" /></label><label>Phone number<input name="citizenPhone" type="tel" inputMode="tel" pattern="\+?[0-9]{10,15}" required placeholder="+91 9876543210" /></label><label>Email address (Optional)<input name="citizenEmail" type="email" placeholder="you@example.com" /></label></div><label>What is this about?<select name="category" required defaultValue=""><option value="" disabled>Select a category</option>{Object.entries(categoryMeta).map(([key, meta]) => <option value={key} key={key}>{meta.label}</option>)}</select></label><label>Give it a short title<input name="title" minLength={6} maxLength={120} required placeholder="e.g. Streetlight not working near the park" /></label><label>Describe what happened<textarea name="description" minLength={20} maxLength={2000} required placeholder="Share details that help the department act..." rows={5} /></label><LocationPicker /></div><div className={step === 2 ? "form-step" : "form-step hidden"}><div className="upload-zone"><span>+</span><h3>Add photo evidence</h3><p>Up to 4 images, 5 MB each. JPG, PNG or WEBP.</p><input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => setFiles(Array.from(event.target.files ?? []).slice(0,4))} aria-label="Upload evidence photos" />{files.length > 0 && <b>{files.length} photo{files.length > 1 ? "s" : ""} selected</b>}</div><div className="consent"><span>OK</span><p><b>Your privacy matters</b><small>Personal details are used only to process your complaint. Public statistics are anonymized.</small></p></div></div>{error && <p className="form-error">{error}</p>}<div className="form-actions">{step === 2 && <button type="button" className="btn btn-outline" onClick={() => setStep(1)}>Back</button>}<button type="submit" className="btn btn-primary" disabled={busy}>{busy ? "Submitting..." : step === 1 ? "Continue" : "Submit complaint"}</button></div></form></Modal>;
+  return <Modal title="File a complaint" eyebrow="NO ACCOUNT OR LOGIN REQUIRED" onClose={onClose} wide><p className="no-login-note">Your contact details let the department send updates. They are never displayed in the public gallery.</p><div className="form-progress"><span className="active"><i>1</i>Contact & concern</span><em /><span className={step >= 2 ? "active" : ""}><i>2</i>Evidence & review</span></div><form className="complaint-form" onSubmit={submit}><div className={step === 1 ? "form-step" : "form-step hidden"}><div className="contact-fields"><label>Your name<input name="citizenName" minLength={2} maxLength={100} required placeholder="Full name" /></label><label>Phone number<input name="citizenPhone" type="tel" inputMode="tel" pattern="\+?[0-9]{10,15}" required placeholder="+91 9876543210" /></label><label>Email address (Optional)<input name="citizenEmail" type="email" placeholder="you@example.com" /></label></div><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", margin: "16px 0" }}><label style={{ margin: 0 }}>Grievance Language / शिकायत की भाषा<select value={selectedLang} onChange={(event) => setSelectedLang(event.target.value)} style={{ marginTop: "6px" }}>{["English", "Hindi", "Bengali", "Marathi", "Telugu", "Tamil", "Gujarati", "Urdu", "Kannada", "Odia", "Malayalam", "Punjabi"].map((lang) => <option key={lang} value={lang}>{lang}</option>)}</select></label><label style={{ margin: 0 }}>What is this about?<select name="category" required defaultValue="" style={{ marginTop: "6px" }}><option value="" disabled>Select a category</option>{Object.entries(categoryMeta).map(([key, meta]) => <option value={key} key={key}>{meta.label}</option>)}</select></label></div><label>Give it a short title<input name="title" minLength={6} maxLength={120} required placeholder="e.g. Streetlight not working near the park" /></label><label>Describe what happened<textarea name="description" minLength={20} maxLength={2000} required placeholder="Share details that help the department act..." rows={5} /></label><LocationPicker /></div><div className={step === 2 ? "form-step" : "form-step hidden"}><div className="upload-zone"><span>+</span><h3>Add photo evidence</h3><p>Up to 4 images, 5 MB each. JPG, PNG or WEBP.</p><input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => setFiles(Array.from(event.target.files ?? []).slice(0,4))} aria-label="Upload evidence photos" />{files.length > 0 && <b>{files.length} photo{files.length > 1 ? "s" : ""} selected</b>}</div><div className="consent"><span>OK</span><p><b>Your privacy matters</b><small>Personal details are used only to process your complaint. Public statistics are anonymized.</small></p></div></div>{error && <p className="form-error">{error}</p>}<div className="form-actions">{step === 2 && <button type="button" className="btn btn-outline" onClick={() => setStep(1)}>Back</button>}<button type="submit" className="btn btn-primary" disabled={busy}>{busy ? "Submitting..." : step === 1 ? "Continue" : "Submit complaint"}</button></div></form></Modal>;
 }
 
 function TrackModal({ onClose, onSelect }: { onClose: () => void; onSelect: (complaint: Complaint) => void }) {
@@ -951,50 +976,7 @@ function UpdateModal({ complaint, portal, onClose, onChanged }: { complaint: Com
   return <Modal title="Update complaint" eyebrow={complaint.trackingId} onClose={onClose}><p className="modal-lede">This update will appear on the citizen&apos;s timeline and queue an email notification.</p><form className="update-form" onSubmit={submit}><label>New status<select value={status} onChange={(event) => setStatus(event.target.value)}>{(nextStatuses[complaint.status] ?? []).map((item) => <option key={item} value={item}>{statusLabels[item]}</option>)}</select></label><label>Public remark<textarea value={remarks} onChange={(event) => setRemarks(event.target.value)} minLength={5} required rows={4} placeholder="Explain what was done or what happens next..." /></label>{status === "resolved" && <label className="resolution-upload">Resolution photo <small>Published in the solved gallery when appropriate</small><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setPhoto(event.target.files?.[0] ?? null)} />{photo && <b>✓ {photo.name}</b>}</label>}{error && <p className="form-error">{error}</p>}<button className="btn btn-primary" disabled={busy}>{busy ? "Saving..." : "Publish update →"}</button></form></Modal>;
 }
 
-function Footer() {
-  const { t } = useLanguage();
-  return (
-    <footer className="gov-footer" role="contentinfo">
-      <div className="gov-footer-main">
-        <div className="gov-footer-brand">
-          <strong>NAMO Jan Connect</strong>
-          <p>{t("footer.brand_desc")}</p>
-          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-            <span style={{ fontSize: "10px", color: "#475569" }}>🔒 NIC Hosted &nbsp;|&nbsp; ♿ GIGW 3.0 &nbsp;|&nbsp; WCAG 2.1 AA</span>
-          </div>
-        </div>
-        <div className="gov-footer-col">
-          <h4>{t("footer.citizen_services")}</h4>
-          <ul>
-            <li><a href="/">{t("footer.lodge")}</a></li>
-            <li><a href="/gallery">{t("footer.track_status")}</a></li>
-            <li><a href="/gallery">{t("footer.solved_gallery")}</a></li>
-            <li><a href="/how-it-works">{t("footer.how_it_works")}</a></li>
-          </ul>
-        </div>
-        <div className="gov-footer-col">
-          <h4>{t("footer.information")}</h4>
-          <ul>
-            <li><a href="/about">{t("footer.about")}</a></li>
-            <li><a href="/privacy">{t("footer.privacy")}</a></li>
-            <li><a href="/accessibility">{t("footer.accessibility")}</a></li>
-            <li><a href="/contact">{t("footer.contact")}</a></li>
-          </ul>
-        </div>
-        <div className="gov-footer-col">
-          <h4>{t("footer.legal")}</h4>
-          <ul>
-            <li><a href="/privacy">{t("footer.terms")}</a></li>
-            <li><a href="/privacy">{t("footer.charter")}</a></li>
-            <li><a href="/privacy">{t("footer.rti")}</a></li>
-            <li><a href="/privacy">{t("footer.hyperlink")}</a></li>
-          </ul>
-        </div>
-      </div>
-      <div className="gov-footer-bottom">{t("footer.bottom")}</div>
-    </footer>
-  );
-}
+
 
 function AdminDepartments({ departmentAccess, complaints, onChanged }: { departmentAccess: DepartmentAccess[]; complaints: Complaint[]; onChanged: () => void }) {
   const [configuring, setConfiguring] = useState<DepartmentAccess | null>(null);

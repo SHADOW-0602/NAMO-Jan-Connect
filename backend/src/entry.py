@@ -392,7 +392,24 @@ async def contact_create(env, request) -> Response:
     name = str(body.get("name", "")).strip(); email = str(body.get("email", "")).strip().lower(); message = str(body.get("message", "")).strip()
     if len(name) < 2 or not valid_email(email) or len(message) < 10: raise ApiError(422, "Complete all contact fields")
     result = await db_run(env.DB, "INSERT INTO contact_messages (name,email,topic,tracking_id,message,status,created_at) VALUES (?,?,?,?,?,'new',?)", name, email, str(body.get("topic", "Support")), body.get("trackingId"), message, iso_now())
-    return json_response(env, {"ok": True, "reference": f"NJC-SUPPORT-{int(result.meta.last_row_id):06d}"}, 201)
+    
+    ref = f"NJC-SUPPORT-{int(result.meta.last_row_id):06d}"
+    subject = f"New NAMO Support Request: {ref}"
+    body_text = (
+        f"A new support message has been sent on NAMO Jan Connect.\n\n"
+        f"Reference: {ref}\n"
+        f"Name: {name}\n"
+        f"Email: {email}\n"
+        f"Topic: {body.get('topic', 'Support')}\n"
+        f"Tracking ID: {body.get('trackingId', 'N/A')}\n\n"
+        f"Message:\n{message}\n"
+    )
+    try:
+        await send_smtp_email(env, "kushagra.singh0562@gmail.com", subject, body_text)
+    except Exception as e:
+        print(f"Failed to send support notification email: {e}")
+
+    return json_response(env, {"ok": True, "reference": ref}, 201)
 
 
 async def serve_upload(env, encoded_key: str) -> Response:
@@ -462,6 +479,55 @@ async def update_complaint(request: Request):
 @app.post("/api/contact", tags=["Support"])
 async def create_contact(request: Request):
     return await contact_create(request.scope["env"], request)
+
+
+@app.get("/api/departments", tags=["System"])
+async def get_departments(request: Request):
+    env = request.scope["env"]
+    depts = await db_all(env.DB, "SELECT id, name, category FROM departments ORDER BY id ASC")
+    return json_response(env, {"departments": depts})
+
+
+@app.post("/api/auth/register", tags=["Authentication"])
+async def register(request: Request):
+    env = request.scope["env"]
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise ApiError(400, "Invalid JSON request") from exc
+    email = str(body.get("email") or "").strip().lower()
+    password = str(body.get("password") or "")
+    try:
+        department_id = int(body.get("departmentId") or 0)
+    except ValueError:
+        raise ApiError(400, "Invalid department ID")
+        
+    if not email or not password or not department_id:
+        raise ApiError(400, "Email, password, and department are required")
+        
+    if not valid_email(email):
+        raise ApiError(422, "A valid department staff email is required")
+        
+    if len(password) < 8:
+        raise ApiError(422, "Password must be at least 8 characters long")
+        
+    # Check if department exists
+    dept = await db_first(env.DB, "SELECT id FROM departments WHERE id=?", department_id)
+    if not dept:
+        raise ApiError(404, "Department not found")
+        
+    # Check if department already has credentials configured
+    portal = await db_first(env.DB, "SELECT staff_email FROM department_portals WHERE department_id=?", department_id)
+    if portal and portal.get("staff_email"):
+        raise ApiError(409, "This department portal is already registered. Please contact the administrator.")
+        
+    try:
+        password_salt, password_hash = make_password_hash(password)
+    except ValueError as exc:
+        raise ApiError(422, str(exc)) from exc
+        
+    await db_run(env.DB, "UPDATE department_portals SET staff_email=?, password_salt=?, password_hash=?, updated_at=? WHERE department_id=?", email, password_salt, password_hash, iso_now(), department_id)
+    return json_response(env, {"ok": True, "message": "Registration successful. You can now sign in."})
 
 
 @app.post("/api/test-email")

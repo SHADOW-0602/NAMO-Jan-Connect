@@ -20,6 +20,13 @@ export default function LocationPicker() {
       const L = await import("leaflet");
       if (disposed || !mapElement.current || map.current) return;
       const instance = L.map(mapElement.current, { zoomControl: true, attributionControl: true }).setView([22.5937, 78.9629], 5);
+      if (mapElement.current) {
+        L.DomEvent.disableScrollPropagation(mapElement.current);
+        L.DomEvent.disableClickPropagation(mapElement.current);
+        mapElement.current.addEventListener("touchmove", (e) => {
+          e.stopPropagation();
+        }, { passive: false });
+      }
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap contributors", maxZoom: 19 }).addTo(instance);
       const pinIcon = L.divIcon({ className: "njc-map-pin-wrap", html: '<span class="njc-map-pin"><i></i></span>', iconSize: [34, 44], iconAnchor: [17, 40] });
       function place(next: Position, zoom = false) {

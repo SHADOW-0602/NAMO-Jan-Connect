@@ -3,9 +3,25 @@ import NamoApp from "./components/NamoApp";
 import HowItWorksPage from "./components/HowItWorksPage";
 import AboutPage from "./components/AboutPage";
 import GalleryPage from "./components/GalleryPage";
+import PrivacyPage from "./components/PrivacyPage";
+import AccessibilityPage from "./components/AccessibilityPage";
+import ContactPage from "./components/ContactPage";
+import TermsPage from "./components/TermsPage";
+import CharterPage from "./components/CharterPage";
+import RtiPage from "./components/RtiPage";
+import HyperlinkPage from "./components/HyperlinkPage";
 import AccessibilityBar from "./components/AccessibilityBar";
 import { LanguageProvider, useLanguage } from "./context/LanguageContext";
 import { apiFetch, readJson } from "./api";
+import { 
+  Building2, 
+  ShieldAlert, 
+  Activity, 
+  FileText, 
+  ArrowLeft, 
+  Heart, 
+  Users2 
+} from "lucide-react";
 
 type Portal = "admin" | "department";
 type Session = { access_token: string; role: string; name: string; department_category?: string | null };
@@ -38,15 +54,40 @@ function StaffLogin(props: { portal: Portal; departmentCategory?: string; depart
 
 function StaffLoginInner({ portal, departmentCategory, departmentLabel, children }: { portal: Portal; departmentCategory?: string; departmentLabel?: string; children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(() => { try { return JSON.parse(localStorage.getItem("njc_staff_session") || "null"); } catch { return null; } });
-  const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(""); 
+  const [busy, setBusy] = useState(false);
   const { t, language } = useLanguage();
 
+  const [activeTab, setActiveTab] = useState<"signin" | "signup">("signin");
+  const [departments, setDepartments] = useState<{ id: number; name: string; category: string }[]>([]);
+  const [regSuccess, setRegSuccess] = useState("");
+  const [regError, setRegError] = useState("");
+
+  const [regEmail, setRegEmail] = useState("");
+  const [regPassword, setRegPassword] = useState("");
+  const [regDeptId, setRegDeptId] = useState("");
+
   useEffect(() => { if (session) localStorage.setItem("njc_staff_session", JSON.stringify(session)); }, [session]);
-  
+
+  useEffect(() => {
+    if (portal === "department") {
+      apiFetch("/api/departments")
+        .then(res => res.ok ? readJson<{ departments: any[] }>(res) : Promise.reject())
+        .then(data => {
+          setDepartments(data.departments || []);
+          if (data.departments && data.departments.length > 0) {
+            setRegDeptId(String(data.departments[0].id));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [portal]);
+
   async function login(event: FormEvent<HTMLFormElement>) { 
     event.preventDefault(); 
     setBusy(true); 
     setError(""); 
+    setRegSuccess("");
     const data = new FormData(event.currentTarget); 
     try { 
       const response = await apiFetch("/api/auth/login", { 
@@ -71,75 +112,176 @@ function StaffLoginInner({ portal, departmentCategory, departmentLabel, children
     } 
   }
 
+  async function handleRegister(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setRegError("");
+    setRegSuccess("");
+    try {
+      const response = await apiFetch("/api/auth/register", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: regEmail, password: regPassword, departmentId: Number(regDeptId) })
+      });
+      const result = await readJson<{ ok: boolean; message?: string; detail?: string }>(response);
+      if (!response.ok) {
+        throw new Error(result.detail || result.message || "Registration failed");
+      }
+      setRegSuccess("Credentials configured successfully! You can now sign in using these details.");
+      setActiveTab("signin");
+      setRegEmail("");
+      setRegPassword("");
+    } catch (caught) {
+      setRegError(caught instanceof Error ? caught.message : "Registration failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (session) return <>{children}<button className="staff-logout" onClick={() => { localStorage.removeItem("njc_staff_session"); setSession(null); }}>Sign out</button></>;
   
-  const title = portal === "admin" ? t("login.admin_signin") : `${departmentLabel} ${language === "hi" ? "लॉगिन" : "Sign In"}`;
-  const help = portal === "admin" ? t("login.admin_help") : t("login.dept_help");
+  const title = portal === "admin" ? t("login.admin_signin") : `${departmentLabel} Portal`;
+  const help = portal === "admin" ? t("login.admin_help") : (activeTab === "signin" ? t("login.dept_help") : "Configure new portal access credentials for your department.");
   const emailLabel = portal === "admin" ? t("login.admin_email") : t("login.email");
 
   return (
-    <div className="portal-login-viewport" style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+    <div className="portal-login-viewport">
       <div className="tricolor-stripe" aria-hidden="true"><span /><span /><span /></div>
       <AccessibilityBar />
       
-      <main className="access-denied" style={{ flex: 1, display: "grid", placeItems: "center", padding: "40px 24px" }}>
-        <form className="staff-login" onSubmit={login} style={{ width: "min(100%, 460px)", borderRadius: "var(--radius-lg)", border: "1px solid var(--border)", boxShadow: "var(--shadow-lg)", padding: "36px 30px", background: "var(--surface)", display: "flex", flexDirection: "column" }}>
+      <main className="access-denied">
+        <div className="staff-login-card">
           
           {/* Emblem Header */}
-          <div className="login-emblem-header" style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: "22px", borderBottom: "1px solid var(--border)", paddingBottom: "18px", textAlign: "center" }}>
-            <img src="/emblem.png" alt="Government of India Emblem" style={{ width: "52px", height: "52px", objectFit: "contain", marginBottom: "8px" }} />
-            <b style={{ fontSize: "11px", letterSpacing: "0.08em", color: "var(--ink)", textTransform: "uppercase", display: "block" }}>{t("a11y.gov_label")}</b>
-            <span style={{ fontSize: "10px", color: "var(--muted)", fontFamily: "var(--font-devanagari)", display: "block", marginTop: "2px" }}>{t("a11y.gov_hindi")}</span>
+          <div className="login-emblem-header">
+            <img src="/emblem.png" alt="Government of India Emblem" className="login-emblem-img" />
+            <b className="gov-label-en">{t("a11y.gov_label")}</b>
+            <span className="gov-label-hi">{t("a11y.gov_hindi")}</span>
           </div>
 
-          <p className="eyebrow" style={{ alignSelf: "center", background: "rgba(15,46,90,0.08)", color: "var(--accent)", padding: "4px 10px", borderRadius: "12px", fontSize: "9px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "16px" }}>
+          <p className="secure-badge">
             {t("login.secure_portal")}
           </p>
 
-          <h1 style={{ fontSize: "20px", fontWeight: 700, margin: "0 0 8px", color: "var(--ink)", textAlign: "center", fontFamily: "var(--font-serif)" }}>{title}</h1>
-          <p style={{ fontSize: "12px", color: "var(--muted)", textAlign: "center", margin: "0 0 24px", lineHeight: 1.6 }}>{help}</p>
+          <h1 className="login-title">{title}</h1>
+          <p className="login-desc">{help}</p>
 
-          {/* Form Fields */}
-          <label style={{ display: "grid", gap: "6px", fontSize: "11px", fontWeight: 850, color: "var(--ink)", marginBottom: "16px" }}>
-            <span style={{ display: "flex", justifyContent: "space-between" }}>
-              <span>{emailLabel}</span>
-              <span style={{ color: "var(--muted)", fontSize: "10px", fontWeight: 550, fontFamily: "var(--font-devanagari)" }}>ईमेल पता</span>
-            </span>
-            <input 
-              name="identifier" 
-              type="email" 
-              required 
-              autoComplete="username" 
-              placeholder={portal === "admin" ? "admin@namo.gov.in" : "officer@namo.gov.in"}
-              style={{ padding: "10px 12px", border: "1px solid var(--border)", borderRadius: "var(--radius)", background: "var(--surface)", color: "var(--ink)", outline: "none" }}
-            />
-          </label>
+          {portal === "department" && (
+            <div className="login-tabs">
+              <button
+                type="button"
+                className={`login-tab-btn ${activeTab === "signin" ? "active" : ""}`}
+                onClick={() => { setActiveTab("signin"); setError(""); setRegError(""); }}
+              >
+                {language === "hi" ? "साइन इन" : "Sign In"}
+              </button>
+              <button
+                type="button"
+                className={`login-tab-btn ${activeTab === "signup" ? "active" : ""}`}
+                onClick={() => { setActiveTab("signup"); setError(""); setRegError(""); }}
+              >
+                {language === "hi" ? "साइन अप" : "Sign Up"}
+              </button>
+            </div>
+          )}
 
-          <label style={{ display: "grid", gap: "6px", fontSize: "11px", fontWeight: 850, color: "var(--ink)", marginBottom: "20px" }}>
-            <span style={{ display: "flex", justifyContent: "space-between" }}>
-              <span>{t("login.password")}</span>
-              <span style={{ color: "var(--muted)", fontSize: "10px", fontWeight: 550, fontFamily: "var(--font-devanagari)" }}>पासवर्ड</span>
-            </span>
-            <input 
-              name="password" 
-              type="password" 
-              required 
-              autoComplete="current-password" 
-              placeholder="••••••••••••"
-              style={{ padding: "10px 12px", border: "1px solid var(--border)", borderRadius: "var(--radius)", background: "var(--surface)", color: "var(--ink)", outline: "none" }}
-            />
-          </label>
+          {activeTab === "signin" ? (
+            <form className="login-form-fields" onSubmit={login}>
+              {regSuccess && <p className="form-success-banner">{regSuccess}</p>}
+              
+              <label className="form-field-label">
+                <span className="form-label-row">
+                  <span>{emailLabel}</span>
+                  <span className="hindi-hint">ईमेल पता</span>
+                </span>
+                <input 
+                  name="identifier" 
+                  type="email" 
+                  required 
+                  autoComplete="username" 
+                  placeholder={portal === "admin" ? "admin@namo.gov.in" : "officer@namo.gov.in"}
+                />
+              </label>
 
-          {error && <p className="form-error" style={{ color: "var(--coral)", fontSize: "11px", fontWeight: 600, margin: "0 0 16px", textAlign: "center" }}>{error}</p>}
+              <label className="form-field-label">
+                <span className="form-label-row">
+                  <span>{t("login.password")}</span>
+                  <span className="hindi-hint">पासवर्ड</span>
+                </span>
+                <input 
+                  name="password" 
+                  type="password" 
+                  required 
+                  autoComplete="current-password" 
+                  placeholder="••••••••••••"
+                />
+              </label>
 
-          <button className="btn btn-primary" disabled={busy} style={{ width: "100%", padding: "12px", fontSize: "13px", fontWeight: 700 }}>
-            {busy ? t("login.signing_in") : t("login.signin")}
-          </button>
+              {error && <p className="form-error-banner">{error}</p>}
+
+              <button className="btn btn-primary login-submit-btn" disabled={busy}>
+                {busy ? t("login.signing_in") : t("login.signin")}
+              </button>
+            </form>
+          ) : (
+            <form className="login-form-fields" onSubmit={handleRegister}>
+              <label className="form-field-label">
+                <span className="form-label-row">
+                  <span>Select Department</span>
+                  <span className="hindi-hint">विभाग चुनें</span>
+                </span>
+                <select 
+                  value={regDeptId}
+                  onChange={(e) => setRegDeptId(e.target.value)}
+                  required
+                >
+                  {departments.map((dept) => (
+                    <option key={dept.id} value={dept.id}>{dept.name}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="form-field-label">
+                <span className="form-label-row">
+                  <span>Staff Email</span>
+                  <span className="hindi-hint">ईमेल पता</span>
+                </span>
+                <input 
+                  type="email" 
+                  required 
+                  value={regEmail}
+                  onChange={(e) => setRegEmail(e.target.value)}
+                  placeholder="officer@namo.gov.in"
+                />
+              </label>
+
+              <label className="form-field-label">
+                <span className="form-label-row">
+                  <span>Password</span>
+                  <span className="hindi-hint">पासवर्ड (न्यूनतम 8 वर्ण)</span>
+                </span>
+                <input 
+                  type="password" 
+                  required 
+                  value={regPassword}
+                  onChange={(e) => setRegPassword(e.target.value)}
+                  placeholder="••••••••••••"
+                  minLength={8}
+                />
+              </label>
+
+              {regError && <p className="form-error-banner">{regError}</p>}
+
+              <button className="btn btn-primary login-submit-btn" disabled={busy}>
+                {busy ? "Registering..." : "Configure Portal Access"}
+              </button>
+            </form>
+          )}
           
-          <a href="/" style={{ alignSelf: "center", marginTop: "18px", fontSize: "12px", color: "var(--accent-2)", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "4px" }}>
+          <a href="/" className="return-home-link">
             {t("login.return")}
           </a>
-        </form>
+        </div>
       </main>
     </div>
   );
@@ -151,37 +293,85 @@ function DashboardHub() {
   return (
     <main className="dashboard-hub">
       <div className="dashboard-hub-inner">
-        <p className="eyebrow">STAFF PORTALS</p>
-        <h1>Select Portal</h1>
-        <a href="/citizen" className="portal-link">
-          <b>Citizen Dashboard</b>
-          <small>View filed complaints, resolution statuses, and live tracking timelines.</small>
+        <p className="eyebrow">PORTAL ACCESS DIRECTORY</p>
+        <h1 className="launcher-title">NAMO Jan Connect Hub</h1>
+        <p className="launcher-subtitle">Access municipal dashboards, citizen services tracking, and admin controls.</p>
+        
+        <div className="launcher-grid">
+          <a href="/citizen" className="flex-col-card">
+            <div className="card-icon-container bg-blue">
+              <Users2 size={20} />
+            </div>
+            <div className="card-content">
+              <b>Citizen Dashboard</b>
+              <small>View filed complaints, resolution statuses, and live tracking timelines.</small>
+            </div>
+          </a>
+
+          <a href="/civic-infra" className="flex-col-card">
+            <div className="card-icon-container bg-amber">
+              <Building2 size={20} />
+            </div>
+            <div className="card-content">
+              <b>Civic &amp; Infrastructure</b>
+              <small>Resolve civic issues, manage water, streetlights, and roads.</small>
+            </div>
+          </a>
+
+          <a href="/health-education" className="flex-col-card">
+            <div className="card-icon-container bg-teal">
+              <Heart size={20} />
+            </div>
+            <div className="card-content">
+              <b>Health &amp; Education</b>
+              <small>Manage clinic, hospital, and school-related issues.</small>
+            </div>
+          </a>
+
+          <a href="/law-order" className="flex-col-card">
+            <div className="card-icon-container bg-coral">
+              <ShieldAlert size={20} />
+            </div>
+            <div className="card-content">
+              <b>Law &amp; Order</b>
+              <small>Review public safety, local policing, and order complaints.</small>
+            </div>
+          </a>
+
+          <a href="/transport" className="flex-col-card">
+            <div className="card-icon-container bg-sky">
+              <Building2 size={20} />
+            </div>
+            <div className="card-content">
+              <b>Transport &amp; Public Services</b>
+              <small>Manage transport permits, PWD roads, and transit issues.</small>
+            </div>
+          </a>
+
+          <a href="/employment-welfare" className="flex-col-card">
+            <div className="card-icon-container bg-green">
+              <FileText size={20} />
+            </div>
+            <div className="card-content">
+              <b>Employment &amp; Welfare</b>
+              <small>Review social pensions, jobs, and social support concerns.</small>
+            </div>
+          </a>
+
+          <a href="/admin" className="portal-link-admin flex-col-card">
+            <div className="card-icon-container bg-navy-accent">
+              <Activity size={20} />
+            </div>
+            <div className="card-content">
+              <b>Administrator Dashboard</b>
+              <small>Full oversight, department routing, and live SLA analytics.</small>
+            </div>
+          </a>
+        </div>
+        
+        <a href="/" className="launcher-back-link">
+          <ArrowLeft size={14} /> Return to public site
         </a>
-        <a href="/civic-infra" className="portal-link">
-          <b>Civic &amp; Infrastructure Portal</b>
-          <small>Resolve civic issues, manage water, streetlights, and roads.</small>
-        </a>
-        <a href="/health-education" className="portal-link">
-          <b>Health &amp; Education Portal</b>
-          <small>Manage clinic, hospital, and school-related issues.</small>
-        </a>
-        <a href="/law-order" className="portal-link">
-          <b>Law &amp; Order Portal</b>
-          <small>Review public safety, local policing, and order complaints.</small>
-        </a>
-        <a href="/transport" className="portal-link">
-          <b>Transport &amp; Public Services Portal</b>
-          <small>Manage transport permits, PWD roads, and transit issues.</small>
-        </a>
-        <a href="/employment-welfare" className="portal-link">
-          <b>Employment &amp; Welfare Portal</b>
-          <small>Review social pensions, jobs, and social support concerns.</small>
-        </a>
-        <a href="/admin" className="portal-link portal-link-admin">
-          <b>Administrator Dashboard</b>
-          <small>Full oversight, department routing, and live SLA analytics.</small>
-        </a>
-        <a href="/" style={{ display: "block", marginTop: "20px", textAlign: "center", fontSize: "12px", color: "var(--accent-2)", fontWeight: 700 }}>← Return to public site</a>
       </div>
     </main>
   );
@@ -202,6 +392,13 @@ export default function App() {
   if (path === "/how-it-works") return <HowItWorksPage />;
   if (path === "/about") return <AboutPage />;
   if (path === "/gallery") return <GalleryPage />;
+  if (path === "/privacy") return <PrivacyPage />;
+  if (path === "/accessibility") return <AccessibilityPage />;
+  if (path === "/contact") return <ContactPage />;
+  if (path === "/terms") return <TermsPage />;
+  if (path === "/charter") return <CharterPage />;
+  if (path === "/rti") return <RtiPage />;
+  if (path === "/hyperlink") return <HyperlinkPage />;
   const dept = departmentPaths[path];
   if (dept) return <StaffLogin portal="department" departmentCategory={dept.category} departmentLabel={dept.label}><NamoApp initialPortal="department" /></StaffLogin>;
   if (info[path]) return <InfoPage data={info[path]} />;
