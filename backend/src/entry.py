@@ -142,7 +142,7 @@ async def authenticate(env, request) -> Response:
         user = await db_first(env.DB, "SELECT id,name,email,role,department_id AS departmentId FROM users WHERE email=?", email)
         department_category = portal["category"]
     token = secrets.token_urlsafe(32)
-    ttl = int(env_text(env, "SESSION_TTL_HOURS", "12"))
+    ttl = int(env_text(env, "SESSION_TTL_HOURS"))
     await db_run(env.DB, "INSERT INTO staff_sessions (user_id,token_hash,expires_at,created_at) VALUES (?,?,?,?)", user["id"], token_hash(token), session_expiry(ttl), now)
     return json_response(env, {"access_token": token, "token_type": "bearer", "role": user["role"], "name": user["name"], "department_category": department_category})
 
