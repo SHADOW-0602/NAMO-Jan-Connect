@@ -104,6 +104,7 @@ function StaffLoginInner({ portal, departmentCategory, departmentLabel, children
           throw new Error(`This account does not have access to the ${departmentLabel || "requested"} portal.`); 
         } 
       } 
+      localStorage.setItem("njc_staff_session", JSON.stringify(result));
       setSession(result); 
     } catch (caught) { 
       setError(caught instanceof Error ? caught.message : "Sign-in failed"); 
