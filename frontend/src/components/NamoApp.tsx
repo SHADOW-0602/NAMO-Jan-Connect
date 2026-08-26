@@ -57,7 +57,7 @@ const categoryMeta: Record<string, { label: string; short: string; tone: string;
 
 
 const statusLabels: Record<string, string> = { submitted: "Submitted", acknowledged: "Acknowledged", in_progress: "In progress", resolved: "Resolved", rejected: "Rejected", reopened: "Reopened" };
-const nextStatuses: Record<string, string[]> = { submitted: ["acknowledged", "rejected"], acknowledged: ["in_progress", "rejected"], in_progress: ["resolved", "rejected"], resolved: ["reopened"], rejected: ["reopened"], reopened: ["acknowledged", "in_progress"] };
+const nextStatuses: Record<string, string[]> = { submitted: ["acknowledged", "rejected"], acknowledged: ["in_progress", "rejected"], in_progress: ["in_progress", "resolved", "rejected"], resolved: ["reopened"], rejected: ["reopened"], reopened: ["acknowledged", "in_progress"] };
 
 function demoHeaders(portal: Portal): Record<string, string> {
   if (typeof window === "undefined") return {};

@@ -16,7 +16,7 @@ CATEGORIES = {
 TRANSITIONS = {
     "submitted": {"acknowledged", "rejected"},
     "acknowledged": {"in_progress", "rejected"},
-    "in_progress": {"resolved", "rejected"},
+    "in_progress": {"resolved", "rejected", "in_progress"},
     "resolved": {"reopened"},
     "rejected": {"reopened"},
     "reopened": {"acknowledged", "in_progress"},

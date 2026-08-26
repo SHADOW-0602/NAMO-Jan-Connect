@@ -138,8 +138,24 @@ function StaffLoginInner({ portal, departmentCategory, departmentLabel, children
       setBusy(false);
     }
   }
+  const isSessionInvalid = !session ? true : (
+    (portal === "admin" && session.role !== "admin") ||
+    (portal === "department" && 
+     !["department_staff", "admin"].includes(session.role)) ||
+    (portal === "department" && 
+     session.role !== "admin" && 
+     departmentCategory && 
+     session.department_category !== departmentCategory)
+  );
 
-  if (session) return <>{children}<button className="staff-logout" onClick={() => { localStorage.removeItem("njc_staff_session"); setSession(null); }}>Sign out</button></>;
+  useEffect(() => {
+    if (session && isSessionInvalid) {
+      localStorage.removeItem("njc_staff_session");
+      setSession(null);
+    }
+  }, [session, isSessionInvalid]);
+
+  if (session && !isSessionInvalid) return <>{children}<button className="staff-logout" onClick={() => { localStorage.removeItem("njc_staff_session"); setSession(null); }}>Sign out</button></>;
   
   const title = portal === "admin" ? t("login.admin_signin") : `${departmentLabel} Portal`;
   const help = portal === "admin" ? t("login.admin_help") : (activeTab === "signin" ? t("login.dept_help") : "Configure new portal access credentials for your department.");
