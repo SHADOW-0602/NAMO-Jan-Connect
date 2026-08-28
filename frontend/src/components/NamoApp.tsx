@@ -150,6 +150,27 @@ export default function NamoApp({ initialPortal = "public" }: { initialPortal?: 
 
   useEffect(() => { if (initialPortal !== "public") void loadPortal(initialPortal); }, [initialPortal]);
 
+  useEffect(() => {
+    if (portal === "citizen") {
+      const params = new URLSearchParams(window.location.search);
+      const trackingId = params.get("tracking");
+      if (trackingId) {
+        apiFetch(`/api/complaints?scope=track&tracking=${encodeURIComponent(trackingId)}`)
+          .then((response) => response.ok ? readJson<Complaint>(response) : Promise.reject())
+          .then((data) => {
+            if (data) {
+              setComplaints((prev) => {
+                if (prev.some((c) => c.trackingId === data.trackingId)) return prev;
+                return [data, ...prev];
+              });
+              setSelected(data);
+            }
+          })
+          .catch(() => {});
+      }
+    }
+  }, [portal]);
+
   async function loadPortal(next: Portal) {
     setPortal(next); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" });
     if (next === "public") return;
@@ -183,7 +204,14 @@ export default function NamoApp({ initialPortal = "public" }: { initialPortal?: 
         {portal === "department" && <DepartmentPortal complaints={complaints} onSelect={setSelected} onChanged={() => loadPortal("department")} />}
         {portal === "admin" && <AdminPortal complaints={complaints} onSelect={setSelected} stats={stats} departmentAccess={departmentAccess} onChanged={() => loadPortal("admin")} />}
         {fileOpen && <ComplaintForm onClose={() => setFileOpen(false)} onCreated={(trackingId) => { setFileOpen(false); setTrackOpen(true); sessionStorage.setItem("newTrackingId", trackingId); }} />}
-        {trackOpen && <TrackModal onClose={() => setTrackOpen(false)} onSelect={(complaint) => { setTrackOpen(false); setSelected(complaint); }} />}
+        {trackOpen && <TrackModal onClose={() => setTrackOpen(false)} onSelect={(complaint) => {
+          setTrackOpen(false);
+          setComplaints((prev) => {
+            if (prev.some((c) => c.trackingId === complaint.trackingId)) return prev;
+            return [complaint, ...prev];
+          });
+          setSelected(complaint);
+        }} />}
         {selected && <ComplaintDetail complaint={selected} portal={portal} onChanged={() => { loadPortal(portal); setSelected(null); }} onClose={() => setSelected(null)} />}
       </div>
     </LanguageProvider>
