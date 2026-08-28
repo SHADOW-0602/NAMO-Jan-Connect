@@ -53,13 +53,45 @@ export default function LocationPicker() {
     navigator.geolocation.getCurrentPosition(({ coords }) => {
       const next = { lat: coords.latitude, lng: coords.longitude };
       setPosition(next); setGpsState("found"); setMessage(`Location detected within about ${Math.round(coords.accuracy)} metres.`);
-      if (!address) setAddress(`GPS location: ${next.lat.toFixed(5)}, ${next.lng.toFixed(5)}`);
+      setAddress("Resolving location address…");
+      fetch(`https://nominatim.openstreetmap.org/reverse?lat=${next.lat}&lon=${next.lng}&format=json&accept-language=en`)
+        .then((res) => res.ok ? res.json() : Promise.reject())
+        .then((data) => {
+          const locName = data?.display_name || "";
+          if (locName) {
+            setAddress(`${locName} (${next.lat.toFixed(5)}, ${next.lng.toFixed(5)})`);
+          } else {
+            setAddress(`GPS location: ${next.lat.toFixed(5)}, ${next.lng.toFixed(5)}`);
+          }
+        })
+        .catch(() => {
+          setAddress(`GPS location: ${next.lat.toFixed(5)}, ${next.lng.toFixed(5)}`);
+        });
       import("leaflet").then((L) => {
         if (!map.current) return;
         const pinIcon = L.divIcon({ className: "njc-map-pin-wrap", html: '<span class="njc-map-pin"><i></i></span>', iconSize: [34, 44], iconAnchor: [17, 40] });
         if (!marker.current) marker.current = L.marker([next.lat, next.lng], { icon: pinIcon, draggable: true }).addTo(map.current);
         else marker.current.setLatLng([next.lat, next.lng]);
-        marker.current.on("dragend", () => { const point = marker.current!.getLatLng(); setPosition({ lat: point.lat, lng: point.lng }); setMessage("Pin moved to your selected location."); });
+        marker.current.on("dragend", () => {
+          const point = marker.current!.getLatLng();
+          const dragged = { lat: point.lat, lng: point.lng };
+          setPosition(dragged);
+          setMessage("Pin moved to your selected location.");
+          setAddress("Resolving location address…");
+          fetch(`https://nominatim.openstreetmap.org/reverse?lat=${dragged.lat}&lon=${dragged.lng}&format=json&accept-language=en`)
+            .then((res) => res.ok ? res.json() : Promise.reject())
+            .then((data) => {
+              const locName = data?.display_name || "";
+              if (locName) {
+                setAddress(`${locName} (${dragged.lat.toFixed(5)}, ${dragged.lng.toFixed(5)})`);
+              } else {
+                setAddress(`GPS location: ${dragged.lat.toFixed(5)}, ${dragged.lng.toFixed(5)}`);
+              }
+            })
+            .catch(() => {
+              setAddress(`GPS location: ${dragged.lat.toFixed(5)}, ${dragged.lng.toFixed(5)}`);
+            });
+        });
         map.current.setView([next.lat, next.lng], 16, { animate: true });
       });
     }, (error) => { setGpsState("error"); setMessage(error.code === 1 ? "Location permission was declined. You can still drop a pin manually." : "We could not detect your location. Drop a pin manually."); }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });

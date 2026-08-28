@@ -292,17 +292,18 @@ function DepartmentPortal({ complaints, onSelect, onChanged }: { complaints: Com
   const [filter, setFilter] = useState("all");
   const [updating, setUpdating] = useState<Complaint | null>(null);
   
-  const visible = complaints.filter((item) => filter === "all" || item.status === filter);
   const session = getStaffSession();
   const category = session?.department_category || Object.keys(categoryMeta).find(key => {
     const path = window.location.pathname.replace(/\/$/, "");
     return path === `/${key.replace("_", "-")}` || (key === "civic_infra" && path === "/civil-department");
   }) || "civic_infra";
+  const deptComplaints = complaints.filter((item) => item.category === category);
+  const visible = deptComplaints.filter((item) => filter === "all" || item.status === filter);
   const label = category && categoryMeta[category] ? categoryMeta[category].label.toUpperCase() : "DEPARTMENT PORTAL";
-  const resolutionRate = complaints.length ? Math.round(complaints.filter((item) => item.status === "resolved").length / complaints.length * 100) : 0;
+  const resolutionRate = deptComplaints.length ? Math.round(deptComplaints.filter((item) => item.status === "resolved").length / deptComplaints.length * 100) : 0;
 
-  const urgentComplaints = complaints.filter((item) => daysUntil(item.slaDueAt) <= 1 && item.status !== "resolved");
-  const resolvedComplaints = complaints.filter((item) => item.status === "resolved");
+  const urgentComplaints = deptComplaints.filter((item) => daysUntil(item.slaDueAt) <= 1 && item.status !== "resolved");
+  const resolvedComplaints = deptComplaints.filter((item) => item.status === "resolved");
 
   // Load and save officers list via Cloudflare KV
   const [officers, setOfficers] = useState<{ id: string; name: string; designation: string; status: string; cases: number; performance: string }[]>([]);
@@ -352,9 +353,9 @@ function DepartmentPortal({ complaints, onSelect, onChanged }: { complaints: Com
             </div>
 
             <div className="metric-row">
-              <Metric label="Assigned" value={complaints.length} note="Current workload" />
+              <Metric label="Assigned" value={deptComplaints.filter((item) => item.status !== "resolved").length} note="Current workload" />
               <Metric label="Needs attention" value={urgentComplaints.length} note="SLA near or overdue" tone="coral" />
-              <Metric label="In progress" value={complaints.filter((item) => item.status === "in_progress").length} note="Field work active" tone="blue" />
+              <Metric label="In progress" value={deptComplaints.filter((item) => item.status === "in_progress").length} note="Field work active" tone="blue" />
               <Metric label="Resolved total" value={resolvedComplaints.length} note="Live records" tone="green" />
             </div>
 
@@ -394,8 +395,8 @@ function DepartmentPortal({ complaints, onSelect, onChanged }: { complaints: Com
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: "16px", padding: "20px 22px" }}>
                   {["submitted", "acknowledged", "in_progress", "resolved"].map((statusKey) => {
-                    const count = complaints.filter(c => c.status === statusKey).length;
-                    const pct = complaints.length ? Math.round((count / complaints.length) * 100) : 0;
+                    const count = deptComplaints.filter(c => c.status === statusKey).length;
+                    const pct = deptComplaints.length ? Math.round((count / deptComplaints.length) * 100) : 0;
                     return (
                       <div key={statusKey} style={{ display: "grid", gridTemplateColumns: "100px 1fr 40px", alignItems: "center", gap: "12px", fontSize: "13px" }}>
                         <span style={{ textTransform: "capitalize", fontWeight: 555 }}>{statusLabels[statusKey] || statusKey}</span>
@@ -424,9 +425,9 @@ function DepartmentPortal({ complaints, onSelect, onChanged }: { complaints: Com
             </div>
 
             <div className="metric-row">
-              <Metric label="Assigned" value={complaints.length} note="Current queue" />
+              <Metric label="Assigned" value={deptComplaints.filter((item) => item.status !== "resolved").length} note="Current queue" />
               <Metric label="Needs attention" value={urgentComplaints.length} note="SLA near or overdue" tone="coral" />
-              <Metric label="In progress" value={complaints.filter((item) => item.status === "in_progress").length} note="Field work active" tone="blue" />
+              <Metric label="In progress" value={deptComplaints.filter((item) => item.status === "in_progress").length} note="Field work active" tone="blue" />
               <Metric label="Resolved total" value={resolvedComplaints.length} note="Live records" tone="green" />
             </div>
 
@@ -488,7 +489,7 @@ function DepartmentPortal({ complaints, onSelect, onChanged }: { complaints: Com
 
             <div className="metric-row">
               <Metric label="Total Officers" value={dynamicOfficers.length} note="Assigned to department" />
-              <Metric label="Average Load" value={`${dynamicOfficers.length ? (complaints.filter(c => c.status !== "resolved").length / dynamicOfficers.length).toFixed(1) : 0} cases`} note="Per active officer" tone="blue" />
+              <Metric label="Average Load" value={`${dynamicOfficers.length ? (deptComplaints.filter(c => c.status !== "resolved").length / dynamicOfficers.length).toFixed(1) : 0} cases`} note="Per active officer" tone="blue" />
               <Metric label="Highest Load" value={`${dynamicOfficers.length ? Math.max(...dynamicOfficers.map(o => o.cases)) : 0} cases`} note="Active assignment max" tone="coral" />
               <Metric label="Avg Redressal" value="5.2 days" note="Target is <14 days" tone="green" />
             </div>
@@ -564,7 +565,7 @@ function DepartmentPortal({ complaints, onSelect, onChanged }: { complaints: Com
               
               {(() => {
                 const allLogs: { complaint: Complaint; oldStatus: string | null; newStatus: string; remarks: string; changedAt: string; changedBy: string }[] = [];
-                complaints.forEach((c) => {
+                deptComplaints.forEach((c) => {
                   if (c.history && c.history.length) {
                     c.history.forEach((h) => {
                       allLogs.push({ complaint: c, ...h });
@@ -666,7 +667,7 @@ function DepartmentPortal({ complaints, onSelect, onChanged }: { complaints: Com
         <AddOfficerModal 
           onClose={() => setAddModalOpen(false)} 
           onAdd={(name, designation, status) => {
-            const activeCasesCount = complaints.filter(c => c.status !== "resolved").length;
+            const activeCasesCount = deptComplaints.filter(c => c.status !== "resolved").length;
             const newOfficer = {
               id: Date.now().toString(),
               name,
@@ -971,9 +972,65 @@ function ComplaintDetail({ complaint, portal, onChanged, onClose }: { complaint:
 }
 
 function UpdateModal({ complaint, portal, onClose, onChanged }: { complaint: Complaint; portal: Portal; onClose: () => void; onChanged: () => void }) {
-  const [status, setStatus] = useState(nextStatuses[complaint.status]?.[0] ?? ""); const [remarks, setRemarks] = useState(""); const [error, setError] = useState(""); const [busy, setBusy] = useState(false); const [photo, setPhoto] = useState<File | null>(null);
-  async function submit(event: FormEvent) { event.preventDefault(); setBusy(true); setError(""); try { const form = new FormData(); form.set("complaintId", String(complaint.id)); form.set("status", status); form.set("remarks", remarks); if (photo) form.set("resolutionPhoto", photo); const response = await apiFetch("/api/complaints", { method: "PATCH", headers: demoHeaders(portal), body: form }); const data = await readJson<any>(response); if (!response.ok) throw new Error(data.error); onChanged(); } catch (caught) { setError(caught instanceof Error ? caught.message : "Update failed"); } finally { setBusy(false); } }
-  return <Modal title="Update complaint" eyebrow={complaint.trackingId} onClose={onClose}><p className="modal-lede">This update will appear on the citizen&apos;s timeline and queue an email notification.</p><form className="update-form" onSubmit={submit}><label>New status<select value={status} onChange={(event) => setStatus(event.target.value)}>{(nextStatuses[complaint.status] ?? []).map((item) => <option key={item} value={item}>{statusLabels[item]}</option>)}</select></label><label>Public remark<textarea value={remarks} onChange={(event) => setRemarks(event.target.value)} minLength={5} required rows={4} placeholder="Explain what was done or what happens next..." /></label>{status === "resolved" && <label className="resolution-upload">Resolution photo <small>Published in the solved gallery when appropriate</small><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setPhoto(event.target.files?.[0] ?? null)} />{photo && <b>✓ {photo.name}</b>}</label>}{error && <p className="form-error">{error}</p>}<button className="btn btn-primary" disabled={busy}>{busy ? "Saving..." : "Publish update →"}</button></form></Modal>;
+  const [status, setStatus] = useState(nextStatuses[complaint.status]?.[0] ?? "");
+  const [remarks, setRemarks] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [photos, setPhotos] = useState<File[]>([]);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const form = new FormData();
+      form.set("complaintId", String(complaint.id));
+      form.set("status", status);
+      form.set("remarks", remarks);
+      photos.forEach((file) => form.append("resolutionPhoto", file));
+      const response = await apiFetch("/api/complaints", {
+        method: "PATCH",
+        headers: demoHeaders(portal),
+        body: form
+      });
+      const data = await readJson<any>(response);
+      if (!response.ok) throw new Error(data.error);
+      onChanged();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Update failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title="Update complaint" eyebrow={complaint.trackingId} onClose={onClose}>
+      <p className="modal-lede">This update will appear on the citizen&apos;s timeline and queue an email notification.</p>
+      <form className="update-form" onSubmit={submit}>
+        <label>
+          New status
+          <select value={status} onChange={(event) => setStatus(event.target.value)}>
+            {(nextStatuses[complaint.status] ?? []).map((item) => (
+              <option key={item} value={item}>{statusLabels[item]}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Public remark
+          <textarea value={remarks} onChange={(event) => setRemarks(event.target.value)} minLength={5} required rows={4} placeholder="Explain what was done or what happens next..." />
+        </label>
+        {status === "resolved" && (
+          <label className="resolution-upload">
+            Resolution photos <small>Published in the solved gallery (Up to 4 images)</small>
+            <input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => setPhotos(Array.from(event.target.files ?? []).slice(0, 4))} />
+            {photos.length > 0 && <b>✓ {photos.length} photo{photos.length > 1 ? "s" : ""} selected</b>}
+          </label>
+        )}
+        {error && <p className="form-error">{error}</p>}
+        <button className="btn btn-primary" disabled={busy}>{busy ? "Saving..." : "Publish update →"}</button>
+      </form>
+    </Modal>
+  );
 }
 
 

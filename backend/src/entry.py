@@ -68,6 +68,7 @@ def cors_headers(env, request_origin: str = "") -> dict[str, str]:
 
 def json_response(env, payload, status: int = 200) -> JSONResponse:
     headers = cors_headers(env)
+    headers["cache-control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return JSONResponse(payload, status_code=status, headers=headers)
 
 
@@ -152,9 +153,9 @@ async def complaint_get(env, request, query: dict[str, list[str]]) -> Response:
     if scope == "stats":
         row = await db_first(env.DB, """SELECT COUNT(*) AS total,
             COALESCE(SUM(CASE WHEN status='resolved' THEN 1 ELSE 0 END),0) AS resolved,
-            COALESCE(SUM(CASE WHEN status NOT IN ('resolved','rejected') THEN 1 ELSE 0 END),0) AS active
-            FROM complaints""") or {"total": 0, "resolved": 0, "active": 0}
-        row["avgDays"] = 0
+            COALESCE(SUM(CASE WHEN status NOT IN ('resolved','rejected') THEN 1 ELSE 0 END),0) AS active,
+            COALESCE(ROUND(AVG(CASE WHEN status='resolved' THEN julianday(resolved_at) - julianday(created_at) ELSE NULL END), 1), 0) AS avgDays
+            FROM complaints""") or {"total": 0, "resolved": 0, "active": 0, "avgDays": 0}
         return json_response(env, {"summary": row, "departments": []})
     if scope == "track":
         tracking = query.get("tracking", [""])[0].strip().upper()
@@ -348,10 +349,12 @@ async def complaint_patch(env, request) -> Response:
     now = iso_now(); resolved_at = now if new_status == "resolved" else None
     await db_run(env.DB, "UPDATE complaints SET status=?,updated_at=?,resolved_at=? WHERE id=?", new_status, now, resolved_at, complaint_id)
     await db_run(env.DB, "INSERT INTO status_history (complaint_id,old_status,new_status,remarks,changed_by,changed_at) VALUES (?,?,?,?,?,?)", complaint_id, item["status"], new_status, remarks, actor["id"], now)
-    photo = form.get("resolutionPhoto")
-    if new_status == "resolved" and photo is not None and getattr(photo, "filename", ""):
-        key, photo_type = await store_image(env, photo, f"complaints/{complaint_id}/resolution")
-        await db_run(env.DB, "INSERT INTO complaint_attachments (complaint_id,object_key,file_type,content_type,uploaded_by,uploaded_at) VALUES (?,?,'resolution_image',?,?,?)", complaint_id, key, photo_type, actor["id"], now)
+    photos = form.getlist("resolutionPhoto")
+    if new_status == "resolved":
+        for photo in photos[:4]:
+            if photo is not None and getattr(photo, "filename", ""):
+                key, photo_type = await store_image(env, photo, f"complaints/{complaint_id}/resolution")
+                await db_run(env.DB, "INSERT INTO complaint_attachments (complaint_id,object_key,file_type,content_type,uploaded_by,uploaded_at) VALUES (?,?,'resolution_image',?,?,?)", complaint_id, key, photo_type, actor["id"], now)
     
     info = await db_first(env.DB, """
         SELECT c.tracking_id AS trackingId, c.title, u.name, u.email

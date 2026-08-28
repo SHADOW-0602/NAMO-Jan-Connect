@@ -11,11 +11,11 @@
   "scripts": {
     "dev": "npm --workspace frontend run dev",
     "dev:frontend": "npm --workspace frontend run dev",
-    "dev:backend": "cd backend && uv run pywrangler dev --port 8787",
+    "dev:backend": "cd backend && npx wrangler dev --port 8787",
     "build": "npm --workspace frontend run build",
     "start": "npm --workspace frontend run preview",
     "test": "npm run build && node --test tests/rendered-html.test.mjs",
-    "deploy:api": "cd backend && uv run pywrangler deploy",
+    "deploy:api": "cd backend && npx wrangler deploy",
     "deploy:frontend": "npm --workspace frontend run build && cd frontend && npx wrangler pages deploy dist --project-name namo-jan-connect",
     "deploy:vercel": "npm --workspace frontend run build && cd frontend && npx vercel --prod"
   },
