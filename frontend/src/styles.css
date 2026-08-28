@@ -533,7 +533,6 @@ img {
 .gov-nav-link.active {
   color: var(--accent);
   background: var(--surface-2);
-  font-weight: 700;
 }
 
 .gov-nav-link::after {
@@ -3533,7 +3532,6 @@ img {
 .login-tab-btn.active {
   border-bottom-color: var(--accent);
   color: var(--accent);
-  font-weight: 700;
 }
 
 .login-form-fields {

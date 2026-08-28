@@ -76,7 +76,6 @@ export default function GovHeader({ onTrack, onFile, activePath = "/" }: GovHead
           aria-label={menuOpen ? "Close menu" : "Open menu"}
           aria-expanded={menuOpen}
           onClick={() => setMenuOpen(!menuOpen)}
-          style={{ background: "none", border: "1px solid var(--border)", borderRadius: "4px", padding: "8px", cursor: "pointer", color: "var(--muted)", display: "none" }}
         >
           {menuOpen ? <X size={18} /> : <Menu size={18} />}
         </button>
