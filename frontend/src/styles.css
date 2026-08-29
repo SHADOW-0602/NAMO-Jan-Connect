@@ -6154,6 +6154,32 @@ img {
   .analytics-summary {
     grid-template-columns: 1fr;
   }
+
+  .data-table {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .resolution-ring-card {
+    flex-direction: column;
+    text-align: center;
+    gap: 16px;
+  }
+
+  .performance-row {
+    grid-template-columns: 1fr auto auto;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .performance-row .stack-track {
+    grid-column: 1 / span 3;
+    grid-row: 2;
+    width: 100%;
+    margin-top: 4px;
+  }
 }
 
 @media (max-width: 480px) {
