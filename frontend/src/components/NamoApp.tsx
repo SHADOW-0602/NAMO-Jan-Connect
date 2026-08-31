@@ -10,7 +10,7 @@ import GovHeader from "./GovHeader";
 import TickerBanner from "./TickerBanner";
 import Modal from "./Modal";
 import { LanguageProvider, useLanguage } from "../context/LanguageContext";
-import { apiFetch, readJson, fetchOfficers, saveOfficers } from "../api";
+import { apiFetch, readJson, fetchOfficers, saveOfficers, getCookie, eraseCookie } from "../api";
 import { 
   FileEdit, 
   Cpu, 
@@ -62,7 +62,8 @@ const nextStatuses: Record<string, string[]> = { submitted: ["acknowledged", "re
 function demoHeaders(portal: Portal): Record<string, string> {
   if (typeof window === "undefined") return {};
   try {
-    const session = JSON.parse(localStorage.getItem("njc_staff_session") || "null") as { access_token?: string } | null;
+    const fromCookie = getCookie("njc_staff_session");
+    const session = JSON.parse(fromCookie || localStorage.getItem("njc_staff_session") || "null") as { access_token?: string } | null;
     if (session?.access_token) return { Authorization: `Bearer ${session.access_token}` };
   } catch {}
   if (window.location.hostname === "localhost") return { "x-demo-role": portal === "department" ? "department_staff" : portal === "admin" ? "admin" : "citizen" };
@@ -179,6 +180,8 @@ export default function NamoApp({ initialPortal = "public" }: { initialPortal?: 
       const response = await apiFetch(`/api/complaints?scope=${scope}`, { headers: demoHeaders(next) });
       if (response.status === 401 || response.status === 403) {
         localStorage.removeItem("njc_staff_session");
+        eraseCookie("njc_staff_session");
+        eraseCookie("njc_access_token");
         window.location.reload();
         return;
       }
@@ -241,6 +244,8 @@ function PublicHome({ stats, onFile, onTrack }: { stats: { total: number; resolv
 function getStaffSession() {
   if (typeof window === "undefined") return null;
   try {
+    const fromCookie = getCookie("njc_staff_session");
+    if (fromCookie) return JSON.parse(fromCookie);
     return JSON.parse(localStorage.getItem("njc_staff_session") || "null") as {
       access_token: string;
       role: string;
@@ -275,7 +280,12 @@ function PortalHeader({ portal, setPortal }: { portal: Portal; setPortal: (porta
         <div className="portal-title"><span />{title}</div>
         <div className="portal-user">
           <ThemeToggleInline />
-          <button onClick={() => { localStorage.removeItem("njc_staff_session"); window.location.href = "/"; }}>← Public site</button>
+          <button onClick={() => {
+            localStorage.removeItem("njc_staff_session");
+            eraseCookie("njc_staff_session");
+            eraseCookie("njc_access_token");
+            window.location.href = "/";
+          }}>← Public site</button>
           <div className="portal-user-avatar" aria-label={`Logged in as ${name}`}>{initials}</div>
           <p><b>{name}</b><small>{role}</small></p>
         </div>

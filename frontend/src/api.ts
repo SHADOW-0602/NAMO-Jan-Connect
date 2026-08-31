@@ -3,9 +3,27 @@ export function apiUrl(path: string): string {
   return path.startsWith("/api") ? `${base}${path}` : path;
 }
 
+export function setCookie(name: string, value: string, days = 30) {
+  if (typeof document === "undefined") return;
+  const expires = new Date(Date.now() + days * 864e5).toUTCString();
+  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
+}
+
+export function getCookie(name: string): string | null {
+  if (typeof document === "undefined") return null;
+  const matches = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([\.$?*|{}\(\)\[\]\\\/\+^])/g, '\\$1') + '=([^;]*)'));
+  return matches ? decodeURIComponent(matches[1]) : null;
+}
+
+export function eraseCookie(name: string) {
+  if (typeof document === "undefined") return;
+  document.cookie = `${name}=; Max-Age=0; path=/; SameSite=Lax`;
+}
+
 export function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const target = typeof input === "string" ? apiUrl(input) : input;
-  return globalThis.fetch(target, init);
+  const opts: RequestInit = { credentials: "include", ...(init || {}) };
+  return globalThis.fetch(target, opts);
 }
 
 export async function readJson<T = Record<string, unknown>>(response: Response): Promise<T> {

@@ -78,9 +78,15 @@ def error_response(env, error: ApiError) -> Response:
 
 def bearer_token(request) -> str | None:
     header = request.headers.get("authorization")
-    if not header or not str(header).lower().startswith("bearer "):
-        return None
-    return str(header).split(" ", 1)[1].strip()
+    if header and str(header).lower().startswith("bearer "):
+        return str(header).split(" ", 1)[1].strip()
+    cookie_header = request.headers.get("cookie", "")
+    if cookie_header:
+        for item in cookie_header.split(";"):
+            item = item.strip()
+            if item.startswith("njc_access_token="):
+                return item.split("=", 1)[1].strip()
+    return None
 
 
 async def current_user(env, request) -> dict | None:
@@ -145,7 +151,9 @@ async def authenticate(env, request) -> Response:
     token = secrets.token_urlsafe(32)
     ttl = int(env_text(env, "SESSION_TTL_HOURS"))
     await db_run(env.DB, "INSERT INTO staff_sessions (user_id,token_hash,expires_at,created_at) VALUES (?,?,?,?)", user["id"], token_hash(token), session_expiry(ttl), now)
-    return json_response(env, {"access_token": token, "token_type": "bearer", "role": user["role"], "name": user["name"], "department_category": department_category})
+    res = json_response(env, {"access_token": token, "token_type": "bearer", "role": user["role"], "name": user["name"], "department_category": department_category})
+    res.headers.append("set-cookie", f"njc_access_token={token}; Path=/; Max-Age={ttl * 3600}; SameSite=Lax")
+    return res
 
 
 async def complaint_get(env, request, query: dict[str, list[str]]) -> Response:

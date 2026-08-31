@@ -8,7 +8,7 @@ import AccessibilityPage from "./components/AccessibilityPage";
 import ContactPage from "./components/ContactPage";
 import AccessibilityBar from "./components/AccessibilityBar";
 import { LanguageProvider, useLanguage } from "./context/LanguageContext";
-import { apiFetch, readJson } from "./api";
+import { apiFetch, readJson, getCookie, setCookie, eraseCookie } from "./api";
 import { 
   Building2, 
   ShieldAlert, 
@@ -49,7 +49,18 @@ function StaffLogin(props: { portal: Portal; departmentCategory?: string; depart
 }
 
 function StaffLoginInner({ portal, departmentCategory, departmentLabel, children }: { portal: Portal; departmentCategory?: string; departmentLabel?: string; children: React.ReactNode }) {
-  const [session, setSession] = useState<Session | null>(() => { try { return JSON.parse(localStorage.getItem("njc_staff_session") || "null"); } catch { return null; } });
+  const [session, setSession] = useState<Session | null>(() => {
+    try {
+      const fromCookie = getCookie("njc_staff_session");
+      if (fromCookie) return JSON.parse(fromCookie);
+      return JSON.parse(localStorage.getItem("njc_staff_session") || "null");
+    } catch {
+      return null;
+    }
+  });
+  const [loginIdentifier, setLoginIdentifier] = useState(() => getCookie("njc_saved_email") || "");
+  const [loginPassword, setLoginPassword] = useState(() => getCookie("njc_saved_password") || "");
+
   const [error, setError] = useState(""); 
   const [busy, setBusy] = useState(false);
   const { t, language } = useLanguage();
@@ -63,7 +74,13 @@ function StaffLoginInner({ portal, departmentCategory, departmentLabel, children
   const [regPassword, setRegPassword] = useState("");
   const [regDeptId, setRegDeptId] = useState("");
 
-  useEffect(() => { if (session) localStorage.setItem("njc_staff_session", JSON.stringify(session)); }, [session]);
+  useEffect(() => {
+    if (session) {
+      const str = JSON.stringify(session);
+      localStorage.setItem("njc_staff_session", str);
+      setCookie("njc_staff_session", str, 30);
+    }
+  }, [session]);
 
   useEffect(() => {
     if (portal === "department") {
@@ -84,12 +101,14 @@ function StaffLoginInner({ portal, departmentCategory, departmentLabel, children
     setBusy(true); 
     setError(""); 
     setRegSuccess("");
-    const data = new FormData(event.currentTarget); 
+    const data = new FormData(event.currentTarget);
+    const identifierVal = String(data.get("identifier") || "");
+    const passwordVal = String(data.get("password") || "");
     try { 
       const response = await apiFetch("/api/auth/login", { 
         method: "POST", 
         headers: { "content-type": "application/json" }, 
-        body: JSON.stringify({ identifier: data.get("identifier"), password: data.get("password") }) 
+        body: JSON.stringify({ identifier: identifierVal, password: passwordVal }) 
       }); 
       const result = await readJson<Session & { detail?: string }>(response); 
       if (!response.ok) throw new Error(result.detail || "Sign-in failed"); 
@@ -100,7 +119,11 @@ function StaffLoginInner({ portal, departmentCategory, departmentLabel, children
           throw new Error(`This account does not have access to the ${departmentLabel || "requested"} portal.`); 
         } 
       } 
-      localStorage.setItem("njc_staff_session", JSON.stringify(result));
+      const sessionStr = JSON.stringify(result);
+      localStorage.setItem("njc_staff_session", sessionStr);
+      setCookie("njc_staff_session", sessionStr, 30);
+      setCookie("njc_saved_email", identifierVal, 30);
+      setCookie("njc_saved_password", passwordVal, 30);
       setSession(result); 
     } catch (caught) { 
       setError(caught instanceof Error ? caught.message : "Sign-in failed"); 
@@ -124,6 +147,10 @@ function StaffLoginInner({ portal, departmentCategory, departmentLabel, children
       if (!response.ok) {
         throw new Error(result.detail || result.message || "Registration failed");
       }
+      setCookie("njc_saved_email", regEmail, 30);
+      setCookie("njc_saved_password", regPassword, 30);
+      setLoginIdentifier(regEmail);
+      setLoginPassword(regPassword);
       setRegSuccess("Credentials configured successfully! You can now sign in using these details.");
       setActiveTab("signin");
       setRegEmail("");
@@ -134,6 +161,14 @@ function StaffLoginInner({ portal, departmentCategory, departmentLabel, children
       setBusy(false);
     }
   }
+
+  function handleSignOut() {
+    localStorage.removeItem("njc_staff_session");
+    eraseCookie("njc_staff_session");
+    eraseCookie("njc_access_token");
+    setSession(null);
+  }
+
   const isSessionInvalid = !session ? true : (
     (portal === "admin" && session.role !== "admin") ||
     (portal === "department" && 
@@ -146,12 +181,11 @@ function StaffLoginInner({ portal, departmentCategory, departmentLabel, children
 
   useEffect(() => {
     if (session && isSessionInvalid) {
-      localStorage.removeItem("njc_staff_session");
-      setSession(null);
+      handleSignOut();
     }
   }, [session, isSessionInvalid]);
 
-  if (session && !isSessionInvalid) return <>{children}<button className="staff-logout" onClick={() => { localStorage.removeItem("njc_staff_session"); setSession(null); }}>Sign out</button></>;
+  if (session && !isSessionInvalid) return <>{children}<button className="staff-logout" onClick={handleSignOut}>Sign out</button></>;
   
   const title = portal === "admin" ? t("login.admin_signin") : `${departmentLabel} Portal`;
   const help = portal === "admin" ? t("login.admin_help") : (activeTab === "signin" ? t("login.dept_help") : "Configure new portal access credentials for your department.");
@@ -211,6 +245,8 @@ function StaffLoginInner({ portal, departmentCategory, departmentLabel, children
                   name="identifier" 
                   type="email" 
                   required 
+                  value={loginIdentifier}
+                  onChange={(e) => setLoginIdentifier(e.target.value)}
                   autoComplete="username" 
                   placeholder={portal === "admin" ? "admin@namo.gov.in" : "officer@namo.gov.in"}
                 />
@@ -225,6 +261,8 @@ function StaffLoginInner({ portal, departmentCategory, departmentLabel, children
                   name="password" 
                   type="password" 
                   required 
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
                   autoComplete="current-password" 
                   placeholder="••••••••••••"
                 />
