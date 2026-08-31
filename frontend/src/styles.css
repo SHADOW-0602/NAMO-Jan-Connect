@@ -1952,7 +1952,7 @@ img {
 
 .workspace-heading h1 {
   font-family: var(--font-serif);
-  font-size: 30px;
+  font-size: 22px;
   font-weight: 600;
   color: var(--ink);
   margin: 0;
@@ -1989,7 +1989,7 @@ img {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 20px;
+  padding: 14px 16px;
   position: relative;
   overflow: hidden;
   animation: rise-in 0.4s ease both;
@@ -2030,10 +2030,10 @@ img {
 .metric>b {
   display: block;
   font-family: var(--font-serif);
-  font-size: 28px;
+  font-size: 22px;
   font-weight: 600;
   color: var(--ink);
-  margin: 10px 0 3px;
+  margin: 6px 0 2px;
 }
 
 .metric>small {
@@ -2083,7 +2083,7 @@ img {
 
 .table-heading h2 {
   font-family: var(--font-serif);
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--ink);
   margin: 0;
@@ -4653,42 +4653,42 @@ img {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 48px 40px;
+  padding: 32px 28px;
   box-shadow: var(--shadow-lg);
 }
 
 .launcher-title {
   font-family: var(--font-serif);
-  font-size: 28px;
+  font-size: 22px;
   font-weight: 700;
   color: var(--ink);
-  margin: 0 0 6px;
+  margin: 0 0 4px;
   text-align: center;
 }
 
 .launcher-subtitle {
-  font-size: 14px;
+  font-size: 12px;
   color: var(--muted);
   text-align: center;
-  margin: 0 0 36px;
+  margin: 0 0 24px;
   line-height: 1.5;
 }
 
 .launcher-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 16px;
-  margin-bottom: 30px;
+  gap: 12px;
+  margin-bottom: 24px;
 }
 
 .flex-col-card {
   display: flex;
   align-items: flex-start;
-  gap: 16px;
+  gap: 12px;
   background: var(--surface-2);
   border: 1.5px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 20px;
+  padding: 14px 16px;
   text-decoration: none;
   transition: all 0.2s ease;
 }
@@ -4701,8 +4701,8 @@ img {
 }
 
 .card-icon-container {
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
@@ -4724,17 +4724,17 @@ img {
 
 .flex-col-card b {
   display: block;
-  font-size: 14px;
+  font-size: 12.5px;
   font-weight: 700;
   color: var(--ink);
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .flex-col-card small {
   display: block;
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--muted);
-  line-height: 1.5;
+  line-height: 1.45;
 }
 
 .portal-link-admin {
@@ -6064,7 +6064,7 @@ img {
   }
 
   .workspace-heading h1 {
-    font-size: 26px;
+    font-size: 18px;
   }
 
   .metric-row {

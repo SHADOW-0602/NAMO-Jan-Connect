@@ -1,0 +1,48 @@
+               CLOUDFLARE WRANGLER CLI COMMANDS
+
+1. CLOUDFLARE D1 DATABASE COMMANDS
+
+A. DATABASE CREATION & MANAGEMENT
+  - Create a new D1 Database:
+    npx wrangler d1 create namo-jan-connect
+
+  - List all D1 Databases in your Cloudflare account:
+    npx wrangler d1 list
+
+  - Inspect database metrics & information:
+    npx wrangler d1 info namo-jan-connect
+
+B. EXECUTING INLINE SQL QUERIES
+  - Run a SELECT query on Production:
+    npx wrangler d1 execute namo-jan-connect --remote --command="SELECT id, tracking_id, title, status FROM complaints LIMIT 10;"
+
+  - Create a new Table in Production:
+    npx wrangler d1 execute namo-jan-connect --remote --command="CREATE TABLE IF NOT EXISTS complaints (id INTEGER PRIMARY KEY AUTOINCREMENT, tracking_id TEXT UNIQUE, title TEXT, status TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);"
+
+  - Update records in Production:
+    npx wrangler d1 execute namo-jan-connect --remote --command="UPDATE complaints SET status='resolved', location_text='E-1 Block, Noida' WHERE id=11;"
+
+  - Delete records in Production:
+    npx wrangler d1 execute namo-jan-connect --remote --command="DELETE FROM complaints WHERE id=99;"
+
+C. EXECUTING SQL SCHEMA / MIGRATION FILES
+  - Apply a SQL schema file to Production:
+    npx wrangler d1 execute namo-jan-connect --remote --file=./backend/schema.sql
+
+  - Apply a SQL schema file to Local Database:
+    npx wrangler d1 execute namo-jan-connect --file=./backend/schema.sql
+
+D. EXPORT & BACKUP
+  - Export remote D1 database to a local .sql file:
+    npx wrangler d1 export namo-jan-connect --remote --output=./backup.sql
+
+2. WORKER API & PAGES DEPLOYMENT COMMANDS
+
+  - Deploy Python / JS Worker Backend API:
+    cd backend && npx wrangler deploy
+
+  - Stream real-time Worker API console logs:
+    cd backend && npx wrangler tail
+
+  - Deploy Frontend React build to Cloudflare Pages:
+    npm --workspace frontend run build && cd frontend && npx wrangler pages deploy dist --project-name namo-jan-connect
