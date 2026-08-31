@@ -831,7 +831,7 @@ function ComplaintForm({ onClose, onCreated }: { onClose: () => void; onCreated:
             <strong style={{ fontSize: "20px", color: "var(--ink)", fontFamily: "monospace" }}>{successData.trackingId}</strong>
           </div>
           {!successData.email ? (
-            <p className="ref-note" style={{ color: "var(--orange)", fontWeight: 550, fontSize: "13px", lineHeight: "1.5", margin: "0 auto 24px", maxWidth: "400px" }}>
+            <p className="ref-note" style={{ color: "var(--accent-2)", fontWeight: 550, fontSize: "13px", lineHeight: "1.5", margin: "0 auto 24px", maxWidth: "400px" }}>
               Please document this tracking number securely. It is required to trace progress or request future assistance.
             </p>
           ) : (
@@ -1122,7 +1122,7 @@ function AdminDepartments({ departmentAccess, complaints, onChanged }: { departm
                   {dept.passwordConfigured ? (
                     <span style={{ color: "var(--green)", fontWeight: 600 }}>● Active</span>
                   ) : (
-                    <span style={{ color: "var(--orange)", fontWeight: 600 }}>○ Pending</span>
+                    <span style={{ color: "var(--accent-2)", fontWeight: 600 }}>○ Pending</span>
                   )}
                 </span>
                 <button className="btn btn-small" onClick={() => setConfiguring(dept)}>

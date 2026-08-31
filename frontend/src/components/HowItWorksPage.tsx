@@ -80,16 +80,13 @@ export default function HowItWorksPage() {
               <span>{s.number}</span>
               <div>
                 <h3 style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <span style={{ width: "36px", height: "36px", borderRadius: "50%", background: "rgba(241,90,50,.1)", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    <s.Icon size={18} color="var(--orange)" />
+                  <span style={{ width: "36px", height: "36px", borderRadius: "50%", background: "rgba(234, 88, 12, 0.15)", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <s.Icon size={18} color="var(--accent-2)" />
                   </span>
                   {s.title}
                 </h3>
                 <p>{s.body}</p>
               </div>
-              <i style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <IconArrowRight size={16} color="var(--orange)" />
-              </i>
             </article>
           ))}
         </div>
@@ -133,10 +130,10 @@ export default function HowItWorksPage() {
                 <div>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px", fontSize: "10px", fontWeight: 700 }}>
                     <span>{row.label}</span>
-                    <span style={{ color: "var(--orange)" }}>{row.days}d SLA</span>
+                    <span style={{ color: "var(--accent-2)" }}>{row.days}d SLA</span>
                   </div>
-                  <div style={{ height: "6px", background: "var(--line)", borderRadius: "6px", overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${row.pct}%`, background: "var(--orange)", borderRadius: "6px", transition: "width 1s ease" }} />
+                  <div style={{ height: "6px", background: "var(--border)", borderRadius: "6px", overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${row.pct}%`, background: "var(--accent-2)", borderRadius: "6px", transition: "width 1s ease" }} />
                   </div>
                 </div>
               </div>
