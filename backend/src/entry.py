@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hmac
+import re
 import secrets
 import uuid
 from urllib.parse import quote, unquote, urlparse
@@ -174,10 +175,11 @@ async def complaint_get(env, request, query: dict[str, list[str]]) -> Response:
     scope = query.get("scope", ["stats"])[0]
     if scope == "stats":
         row = await db_first(env.DB, """SELECT COUNT(*) AS total,
+            COUNT(DISTINCT citizen_id) AS uniqueCitizens,
             COALESCE(SUM(CASE WHEN status='resolved' THEN 1 ELSE 0 END),0) AS resolved,
             COALESCE(SUM(CASE WHEN status NOT IN ('resolved','rejected') THEN 1 ELSE 0 END),0) AS active,
             COALESCE(ROUND(AVG(CASE WHEN status='resolved' THEN julianday(resolved_at) - julianday(created_at) ELSE NULL END), 1), 0) AS avgDays
-            FROM complaints""") or {"total": 0, "resolved": 0, "active": 0, "avgDays": 0}
+            FROM complaints""") or {"total": 0, "uniqueCitizens": 0, "resolved": 0, "active": 0, "avgDays": 0}
         return json_response(env, {"summary": row, "departments": []})
     if scope == "track":
         tracking = query.get("tracking", [""])[0].strip().upper()
@@ -209,6 +211,43 @@ async def complaint_get(env, request, query: dict[str, list[str]]) -> Response:
                 h["changedBy"] = name or "System Router"
         item["history"] = history_rows
         return json_response(env, item)
+    if scope == "by_contact":
+        contact = query.get("contact", [""])[0].strip()
+        if not contact or len(contact) < 3:
+            raise ApiError(422, "Please provide a valid phone number or email address")
+        contact_lower = contact.lower()
+        cleaned_phone = re.sub(r"[\s()-]", "", contact)
+        
+        complaints = await db_all(env.DB, COMPLAINT_SELECT + """
+            WHERE (lower(u.email) = ? OR u.phone = ? OR u.phone = ?)
+            ORDER BY c.created_at DESC
+        """, contact_lower, contact, cleaned_phone)
+        
+        # Anonymize/scrub citizen private info and fetch status history
+        for c in complaints:
+            c["citizenName"] = "Citizen"
+            c.pop("citizenEmail", None)
+            c.pop("citizenPhone", None)
+        
+        if complaints:
+            complaint_ids = [c["id"] for c in complaints]
+            placeholders = ",".join("?" for _ in complaint_ids)
+            history_rows = await db_all(env.DB, f"""
+                SELECT h.complaint_id AS complaintId, h.old_status AS oldStatus, h.new_status AS newStatus,
+                       h.remarks, h.changed_at AS changedAt, u.name AS changedBy
+                FROM status_history h
+                LEFT JOIN users u ON u.id = h.changed_by
+                WHERE h.complaint_id IN ({placeholders})
+                ORDER BY h.changed_at ASC
+            """, *complaint_ids)
+            history_map = {}
+            for row in history_rows:
+                cid = row.pop("complaintId")
+                history_map.setdefault(cid, []).append(row)
+            for c in complaints:
+                c["history"] = history_map.get(c["id"], [])
+        
+        return json_response(env, {"complaints": complaints, "total": len(complaints)})
     if scope == "gallery":
         parsed_url = urlparse(str(request.url))
         origin = f"{parsed_url.scheme}://{parsed_url.netloc}"
@@ -305,12 +344,24 @@ async def complaint_create(env, request) -> Response:
         recent = await db_first(env.DB, "SELECT COUNT(*) AS total FROM complaints c JOIN users u ON u.id=c.citizen_id WHERE u.phone=? AND c.created_at >= datetime('now','-1 day')", phone)
     if recent and int(recent["total"]) >= 10: raise ApiError(429, "Daily complaint limit reached")
     now = iso_now()
+    # Deduplicate citizen: match by email or phone
+    citizen = None
     if email_val:
-        await db_run(env.DB, "INSERT INTO users (name,email,phone,role,created_at) VALUES (?,?,?,'citizen',?) ON CONFLICT(email) DO UPDATE SET name=excluded.name, phone=excluded.phone", name, email_val, phone, now)
-        citizen = await db_first(env.DB, "SELECT id FROM users WHERE email=?", email_val)
+        citizen = await db_first(env.DB, "SELECT id, email, phone FROM users WHERE lower(email)=?", email_val)
+    if not citizen and phone:
+        citizen = await db_first(env.DB, "SELECT id, email, phone FROM users WHERE phone=?", phone)
+    
+    if citizen:
         citizen_id = citizen["id"]
+        # Update user name and fill in phone/email if newly provided
+        await db_run(env.DB, """
+            UPDATE users SET name=?, 
+                             email=COALESCE(?, email), 
+                             phone=COALESCE(?, phone) 
+            WHERE id=?
+        """, name, email_val, phone, citizen_id)
     else:
-        res = await db_run(env.DB, "INSERT INTO users (name,email,phone,role,created_at) VALUES (?,NULL,?,'citizen',?)", name, phone, now)
+        res = await db_run(env.DB, "INSERT INTO users (name,email,phone,role,created_at) VALUES (?,?,?,'citizen',?)", name, email_val, phone, now)
         citizen_id = int(res.meta.last_row_id)
     department = await db_first(env.DB, "SELECT id,name,sla_days AS sla FROM departments WHERE category=?", category)
     result = await db_run(env.DB, """INSERT INTO complaints (tracking_id,citizen_id,category,department_id,title,description,location_text,latitude,longitude,status,priority,created_at,updated_at,sla_due_at)

@@ -179,7 +179,7 @@ export default function NamoApp({ initialPortal = "public" }: { initialPortal?: 
     const scope = next === "citizen" ? "mine" : next;
     try {
       const response = await apiFetch(`/api/complaints?scope=${scope}`, { headers: demoHeaders(next) });
-      if (response.status === 401 || response.status === 403) {
+      if (response.status === 401) {
         localStorage.removeItem("njc_staff_session");
         eraseCookie("njc_staff_session");
         eraseCookie("njc_access_token");
@@ -204,7 +204,24 @@ export default function NamoApp({ initialPortal = "public" }: { initialPortal?: 
         )}
         {portal !== "public" && <PortalHeader portal={portal} setPortal={loadPortal} />}
         {portal === "public" && <PublicHome stats={stats} onFile={() => setFileOpen(true)} onTrack={() => setTrackOpen(true)} />}
-        {portal === "citizen" && <CitizenPortal complaints={complaints} onFile={() => setFileOpen(true)} onSelect={setSelected} />}
+        {portal === "citizen" && (
+          <CitizenPortal
+            complaints={complaints}
+            onFile={() => setFileOpen(true)}
+            onSelect={setSelected}
+            onComplaintsLoaded={(list) => {
+              setComplaints((prev) => {
+                const combined = [...list];
+                for (const item of prev) {
+                  if (!combined.some((c) => c.trackingId === item.trackingId)) {
+                    combined.push(item);
+                  }
+                }
+                return combined;
+              });
+            }}
+          />
+        )}
         {portal === "department" && <DepartmentPortal complaints={complaints} onSelect={setSelected} onChanged={() => loadPortal("department")} />}
         {portal === "admin" && <AdminPortal complaints={complaints} onSelect={setSelected} stats={stats} departmentAccess={departmentAccess} onChanged={() => loadPortal("admin")} />}
         {fileOpen && <ComplaintForm onClose={() => setFileOpen(false)} onCreated={(trackingId) => { setFileOpen(false); setTrackOpen(true); sessionStorage.setItem("newTrackingId", trackingId); }} />}
@@ -284,12 +301,7 @@ function PortalHeader({ portal, setPortal }: { portal: Portal; setPortal: (porta
         <div className="portal-title"><span />{title}</div>
         <div className="portal-user">
           <ThemeToggleInline />
-          <button onClick={() => {
-            localStorage.removeItem("njc_staff_session");
-            eraseCookie("njc_staff_session");
-            eraseCookie("njc_access_token");
-            window.location.href = "/";
-          }}>← Public site</button>
+          <button onClick={() => { window.location.href = "/"; }}>← Public site</button>
           <div className="portal-user-avatar" aria-label={`Logged in as ${name}`}>{initials}</div>
           <p><b>{name}</b><small>{role}</small></p>
         </div>
@@ -322,9 +334,138 @@ function Sidebar({ portal, active = "overview", onNavigate }: { portal: Portal; 
   return <aside className="sidebar"><nav><button className="active"><span><BarChart3 size={16} /></span>Overview</button><button><span><FileText size={16} /></span>{portal === "citizen" ? "My complaints" : "Complaint queue"}</button>{portal !== "citizen" && <button><span><Users size={16} /></span>Team workload</button>}<button><span><Activity size={16} /></span>Activity</button><button><span><Settings size={16} /></span>Settings</button></nav><div className="sidebar-help"><span>?</span><b>Need assistance?</b><p>Read the portal guide or contact support.</p><a href="mailto:kushagra.singh0602@gmail.com">Get help →</a></div></aside>;
 }
 
-function CitizenPortal({ complaints, onFile, onSelect }: { complaints: Complaint[]; onFile: () => void; onSelect: (complaint: Complaint) => void }) {
+function CitizenPortal({
+  complaints,
+  onFile,
+  onSelect,
+  onComplaintsLoaded,
+}: {
+  complaints: Complaint[];
+  onFile: () => void;
+  onSelect: (complaint: Complaint) => void;
+  onComplaintsLoaded?: (list: Complaint[]) => void;
+}) {
+  const [lookupInput, setLookupInput] = useState("");
+  const [lookupBusy, setLookupBusy] = useState(false);
+  const [lookupError, setLookupError] = useState("");
+  const [lookupNotice, setLookupNotice] = useState("");
+
   const active = complaints.filter((item) => !["resolved", "rejected"].includes(item.status)).length;
-  return <div className="portal-shell"><Sidebar portal="citizen" /><main className="workspace"><div className="workspace-heading"><div><p className="eyebrow">CITIZEN WORKSPACE</p><h1>Your complaint records</h1><p>Only complaints retrieved from the live service are shown here.</p></div><button className="btn btn-primary" onClick={onFile}>＋ New complaint</button></div><div className="metric-row"><Metric label="Total complaints" value={complaints.length} note="Live records" /><Metric label="Active" value={active} note="Being worked on" tone="blue" /><Metric label="Resolved" value={complaints.filter((item) => item.status === "resolved").length} note="Completed" tone="green" /></div><section className="workspace-section"><div className="table-heading"><div><h2>Your complaints</h2><p>Every retrieved update, in one place.</p></div></div>{complaints.length ? <div className="citizen-list">{complaints.map((complaint) => <button className="complaint-row" key={complaint.trackingId} onClick={() => onSelect(complaint)}><CategoryBadge category={complaint.category} /><div className="complaint-main"><p className="mono">{complaint.trackingId}</p><h3>{complaint.title}</h3><small>⌖ {complaint.location}</small></div><StatusPill status={complaint.status} /><div className="complaint-date"><b>{formatDate(complaint.updatedAt)}</b><small>Last updated</small></div><span className="row-arrow">→</span></button>)}</div> : <EmptyAdminState text="Use your tracking ID to retrieve a complaint. No sample records are displayed." />}</section></main></div>;
+
+  async function handleLookup(event: FormEvent) {
+    event.preventDefault();
+    const val = lookupInput.trim();
+    if (!val) return;
+    setLookupBusy(true);
+    setLookupError("");
+    setLookupNotice("");
+
+    try {
+      // If it looks like a single tracking ID
+      if (val.toUpperCase().startsWith("NJC-") || val.toUpperCase().startsWith("PENDING-")) {
+        const response = await apiFetch(`/api/complaints?scope=track&tracking=${encodeURIComponent(val)}`);
+        const data = await readJson<any>(response);
+        if (!response.ok) throw new Error(data.error || "Tracking ID not found");
+        onComplaintsLoaded?.([data]);
+        setLookupNotice(`Retrieved 1 complaint: ${data.trackingId}`);
+        onSelect(data);
+      } else {
+        // Look up all complaints by phone or email
+        const response = await apiFetch(`/api/complaints?scope=by_contact&contact=${encodeURIComponent(val)}`);
+        const data = await readJson<any>(response);
+        if (!response.ok) throw new Error(data.error || "Failed to find complaints");
+        if (!data.complaints || data.complaints.length === 0) {
+          setLookupError("No complaints found for this contact. Please check your phone or email.");
+        } else {
+          onComplaintsLoaded?.(data.complaints);
+          setLookupNotice(`Retrieved ${data.complaints.length} complaint${data.complaints.length > 1 ? "s" : ""} filed by you.`);
+        }
+      }
+    } catch (caught) {
+      setLookupError(caught instanceof Error ? caught.message : "Error retrieving records");
+    } finally {
+      setLookupBusy(false);
+    }
+  }
+
+  return (
+    <div className="portal-shell">
+      <Sidebar portal="citizen" />
+      <main className="workspace">
+        <div className="workspace-heading">
+          <div>
+            <p className="eyebrow">CITIZEN WORKSPACE</p>
+            <h1>Your complaint records</h1>
+            <p>Look up grievances by phone number, email, or tracking ID.</p>
+          </div>
+          <button className="btn btn-primary" onClick={onFile}>
+            ＋ New complaint
+          </button>
+        </div>
+
+        {/* Citizen Quick Lookup Card */}
+        <section className="workspace-section citizen-lookup-card">
+          <div className="citizen-lookup-inner">
+            <div>
+              <h3>Find Your Past Complaints</h3>
+              <p>Enter your phone number (+91...), email, or a tracking ID to retrieve all past grievances.</p>
+            </div>
+            <form className="track-form" onSubmit={handleLookup} style={{ maxWidth: "480px", width: "100%" }}>
+              <input
+                value={lookupInput}
+                onChange={(e) => setLookupInput(e.target.value)}
+                placeholder="Phone (+91...), Email, or NJC Tracking ID"
+                style={{ textTransform: "none", letterSpacing: "normal" }}
+                required
+              />
+              <button className="btn btn-primary" disabled={lookupBusy}>
+                {lookupBusy ? "Retrieving..." : "Retrieve →"}
+              </button>
+            </form>
+          </div>
+          {lookupError && <p className="form-error" style={{ marginTop: "10px" }}>{lookupError}</p>}
+          {lookupNotice && <p className="form-success" style={{ marginTop: "10px", color: "var(--green)", fontWeight: 600, fontSize: "13px" }}>✓ {lookupNotice}</p>}
+        </section>
+
+        <div className="metric-row">
+          <Metric label="Total complaints" value={complaints.length} note="Retrieved records" />
+          <Metric label="Active" value={active} note="Being worked on" tone="blue" />
+          <Metric label="Resolved" value={complaints.filter((item) => item.status === "resolved").length} note="Completed" tone="green" />
+        </div>
+
+        <section className="workspace-section">
+          <div className="table-heading">
+            <div>
+              <h2>Your complaints</h2>
+              <p>Every retrieved update, in one place.</p>
+            </div>
+          </div>
+          {complaints.length ? (
+            <div className="citizen-list">
+              {complaints.map((complaint) => (
+                <button className="complaint-row" key={complaint.trackingId} onClick={() => onSelect(complaint)}>
+                  <CategoryBadge category={complaint.category} />
+                  <div className="complaint-main">
+                    <p className="mono">{complaint.trackingId}</p>
+                    <h3>{complaint.title}</h3>
+                    <small>⌖ {complaint.location}</small>
+                  </div>
+                  <StatusPill status={complaint.status} />
+                  <div className="complaint-date">
+                    <b>{formatDate(complaint.updatedAt)}</b>
+                    <small>Last updated</small>
+                  </div>
+                  <span className="row-arrow">→</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <EmptyAdminState text="Use your phone number, email address, or tracking ID above to retrieve your complaints." />
+          )}
+        </section>
+      </main>
+    </div>
+  );
 }
 
 function Metric({ label, value, note, tone = "ink" }: { label: string; value: string | number; note: string; tone?: string }) { return <article className={`metric metric-${tone}`}><span>{label}</span><b>{value}</b><small>{note}</small></article>; }
@@ -870,10 +1011,157 @@ function ComplaintForm({ onClose, onCreated }: { onClose: () => void; onCreated:
 }
 
 function TrackModal({ onClose, onSelect }: { onClose: () => void; onSelect: (complaint: Complaint) => void }) {
-  const [tracking, setTracking] = useState(""); const [result, setResult] = useState<Complaint | null>(null); const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
-  useEffect(() => { const fresh = sessionStorage.getItem("newTrackingId"); if (fresh) { setTracking(fresh); sessionStorage.removeItem("newTrackingId"); } }, []);
-  async function search(event: FormEvent) { event.preventDefault(); setBusy(true); setError(""); setResult(null); try { const response = await apiFetch(`/api/complaints?scope=track&tracking=${encodeURIComponent(tracking)}`); const data = await readJson<any>(response); if (!response.ok) throw new Error(data.error); setResult(data); } catch (caught) { setError(caught instanceof Error ? caught.message : "Tracking ID not found"); } finally { setBusy(false); } }
-  return <Modal title="Track a complaint" eyebrow="PUBLIC TRACKING" onClose={onClose}><p className="modal-lede">Enter the tracking ID issued after your complaint was submitted.</p><form className="track-form" onSubmit={search}><input value={tracking} onChange={(event) => setTracking(event.target.value)} placeholder="Enter your tracking ID" aria-label="Complaint tracking ID" required /><button className="btn btn-primary" disabled={busy}>{busy ? "Finding..." : "Track →"}</button></form>{error && <p className="form-error">{error}</p>}{result && <button className="track-result" onClick={() => onSelect(result)}><div><CategoryBadge category={result.category} /><StatusPill status={result.status} /></div><p className="mono">{result.trackingId}</p><h3>{result.title}</h3><StatusTimeline complaint={result} /><span>Open full timeline →</span></button>}</Modal>;
+  const [tab, setTab] = useState<"id" | "contact">("id");
+  const [tracking, setTracking] = useState("");
+  const [contact, setContact] = useState("");
+  const [result, setResult] = useState<Complaint | null>(null);
+  const [complaintList, setComplaintList] = useState<Complaint[]>([]);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const fresh = sessionStorage.getItem("newTrackingId");
+    if (fresh) {
+      setTracking(fresh);
+      sessionStorage.removeItem("newTrackingId");
+    }
+  }, []);
+
+  async function searchById(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    setResult(null);
+    setComplaintList([]);
+    try {
+      const response = await apiFetch(`/api/complaints?scope=track&tracking=${encodeURIComponent(tracking.trim())}`);
+      const data = await readJson<any>(response);
+      if (!response.ok) throw new Error(data.error || "Tracking ID not found");
+      setResult(data);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Tracking ID not found");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function searchByContact(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    setResult(null);
+    setComplaintList([]);
+    try {
+      const response = await apiFetch(`/api/complaints?scope=by_contact&contact=${encodeURIComponent(contact.trim())}`);
+      const data = await readJson<any>(response);
+      if (!response.ok) throw new Error(data.error || "Failed to find complaints");
+      if (!data.complaints || data.complaints.length === 0) {
+        setError("No complaints found for this contact details. Please check and try again.");
+      } else {
+        setComplaintList(data.complaints);
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Error retrieving complaints");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title="Track complaints" eyebrow="CITIZEN REDRESSAL" onClose={onClose} wide={complaintList.length > 0}>
+      <div className="track-tab-header">
+        <button
+          type="button"
+          className={`track-tab-btn ${tab === "id" ? "active" : ""}`}
+          onClick={() => { setTab("id"); setError(""); }}
+        >
+          By Tracking ID
+        </button>
+        <button
+          type="button"
+          className={`track-tab-btn ${tab === "contact" ? "active" : ""}`}
+          onClick={() => { setTab("contact"); setError(""); }}
+        >
+          Find all my complaints (Phone / Email)
+        </button>
+      </div>
+
+      {tab === "id" ? (
+        <>
+          <p className="modal-lede">Enter the unique tracking ID issued after filing your grievance.</p>
+          <form className="track-form" onSubmit={searchById}>
+            <input
+              value={tracking}
+              onChange={(event) => setTracking(event.target.value)}
+              placeholder="e.g. NJC-2026-000042"
+              aria-label="Complaint tracking ID"
+              required
+            />
+            <button className="btn btn-primary" disabled={busy}>
+              {busy ? "Finding..." : "Track →"}
+            </button>
+          </form>
+          {error && <p className="form-error">{error}</p>}
+          {result && (
+            <button className="track-result" onClick={() => onSelect(result)}>
+              <div>
+                <CategoryBadge category={result.category} />
+                <StatusPill status={result.status} />
+              </div>
+              <p className="mono">{result.trackingId}</p>
+              <h3>{result.title}</h3>
+              <StatusTimeline complaint={result} />
+              <span>Open full timeline →</span>
+            </button>
+          )}
+        </>
+      ) : (
+        <>
+          <p className="modal-lede">Enter the mobile phone number or email address you used while lodging your complaints.</p>
+          <form className="track-form" onSubmit={searchByContact}>
+            <input
+              value={contact}
+              onChange={(event) => setContact(event.target.value)}
+              placeholder="Phone (+91 9876543210) or Email"
+              aria-label="Phone or Email address"
+              style={{ textTransform: "none", letterSpacing: "normal" }}
+              required
+            />
+            <button className="btn btn-primary" disabled={busy}>
+              {busy ? "Searching..." : "Find all →"}
+            </button>
+          </form>
+          {error && <p className="form-error">{error}</p>}
+          {complaintList.length > 0 && (
+            <div className="past-complaints-box">
+              <div className="past-complaints-meta">
+                <b>Found {complaintList.length} complaint{complaintList.length > 1 ? "s" : ""}</b>
+                <small>Click any complaint to view its full action timeline</small>
+              </div>
+              <div className="citizen-list" style={{ maxHeight: "360px", overflowY: "auto", marginTop: "10px" }}>
+                {complaintList.map((c) => (
+                  <button className="complaint-row" key={c.trackingId} onClick={() => onSelect(c)}>
+                    <CategoryBadge category={c.category} />
+                    <div className="complaint-main">
+                      <p className="mono">{c.trackingId}</p>
+                      <h3>{c.title}</h3>
+                      <small>⌖ {c.location}</small>
+                    </div>
+                    <StatusPill status={c.status} />
+                    <div className="complaint-date">
+                      <b>{formatDate(c.updatedAt)}</b>
+                      <small>Updated</small>
+                    </div>
+                    <span className="row-arrow">→</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </Modal>
+  );
 }
 
 function ComplaintDetail({ complaint, portal, onChanged, onClose }: { complaint: Complaint; portal?: Portal; onChanged?: () => void; onClose: () => void }) {

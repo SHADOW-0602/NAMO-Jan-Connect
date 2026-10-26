@@ -167,11 +167,8 @@ function StaffLoginInner({ portal: initialPortal = "department", departmentCateg
      session.department_category !== targetCategory)
   );
 
-  useEffect(() => {
-    if (session && isSessionInvalid) {
-      handleSignOut();
-    }
-  }, [session, isSessionInvalid]);
+  // A session that doesn't match this portal just shows the login form;
+  // it is kept so the officer stays signed in for their own portal.
 
   if (session && !isSessionInvalid) {
     if (children) {
@@ -226,9 +223,6 @@ function StaffLoginInner({ portal: initialPortal = "department", departmentCateg
                 <span className="split-pill-badge">
                   <Lock size={12} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />
                   Restricted Official Access
-                </span>
-                <span className="split-pill-badge-outline">
-                  256-Bit Encrypted
                 </span>
               </div>
             </div>

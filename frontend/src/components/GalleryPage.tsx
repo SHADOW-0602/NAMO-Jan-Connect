@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import PublicLayout from "./PublicLayout";
-import { IconLock, IconCheck, IconCamera } from "./Icons";
+import Modal from "./Modal";
+import { IconLock, IconCheck, IconCamera, IconPin, IconTicket, IconClock } from "./Icons";
 import { apiFetch, readJson } from "../api";
 
 type GalleryItem = {
@@ -28,6 +29,7 @@ export default function GalleryPage() {
   const [apiItems, setApiItems] = useState<GalleryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState(ALL_FILTER);
+  const [selectedItem, setSelectedItem] = useState<GalleryItem | null>(null);
 
   useEffect(() => {
     apiFetch("/api/complaints?scope=gallery")
@@ -136,7 +138,12 @@ export default function GalleryPage() {
           ) : (
             <div className="resolved-gallery reveal-on-view">
               {displayed.map((item) => (
-                <article key={`${item.id}-${item.trackingId}`}>
+                <article
+                  key={`${item.id}-${item.trackingId}`}
+                  onClick={() => setSelectedItem(item)}
+                  style={{ cursor: "pointer" }}
+                  title="Click to view verified evidence"
+                >
                   <div className="gallery-photo">
                     <img
                       src={item.imageUrl}
@@ -145,7 +152,7 @@ export default function GalleryPage() {
                     />
                     <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                       <IconCheck size={10} color="#1e7255" />
-                      Solved
+                      Verified Solved
                     </span>
                   </div>
                   <div className="gallery-card-copy">
@@ -165,27 +172,81 @@ export default function GalleryPage() {
 
         {/* Stats band */}
         <div className="gallery-stats-band">
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "40px", maxWidth: "900px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "40px", maxWidth: "800px" }}>
             {[
-              [String(apiItems.length), "Resolved cases published"],
-              [String(categories.length), "Departments with published evidence"],
-              [loading ? "…" : "Live", "Data source"],
+              [String(apiItems.length), "Resolved cases published with photo proof"],
+              [String(categories.length), "Public departments with verified redressed cases"],
             ].map(([stat, label]) => (
               <div key={label}>
-                <b style={{ display: "block", fontFamily: "var(--font-display, Georgia)", fontSize: "42px", fontWeight: 500, letterSpacing: "-.03em" }}>{stat}</b>
-                <span style={{ fontSize: "10px", textTransform: "uppercase", letterSpacing: ".12em" }}>{label}</span>
+                <b style={{ display: "block", fontFamily: "var(--font-display, Georgia)", fontSize: "44px", fontWeight: 600, letterSpacing: "-.03em" }}>{stat}</b>
+                <span style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: ".1em", lineHeight: 1.4, display: "block", marginTop: "4px" }}>{label}</span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* CTA */}
-        <section className="info-cta reveal-on-view">
-          <p className="eyebrow">YOUR TURN</p>
-          <h2>See an issue<br />that needs solving?</h2>
-          <p>File a complaint in under 90 seconds. No account required.</p>
-          <a href="/" className="btn btn-primary btn-large">File a complaint →</a>
-        </section>
+        {/* Full-view Evidence Modal */}
+        {selectedItem && (
+          <Modal
+            title={selectedItem.title}
+            eyebrow={`SOLVED EVIDENCE · ${selectedItem.trackingId}`}
+            onClose={() => setSelectedItem(null)}
+            wide
+          >
+            <div style={{ display: "flex", flexDirection: "column", gap: "20px", marginTop: "8px" }}>
+              <div
+                style={{
+                  width: "100%",
+                  maxHeight: "520px",
+                  borderRadius: "var(--radius-md)",
+                  overflow: "hidden",
+                  background: "#000",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <img
+                  src={selectedItem.imageUrl}
+                  alt={selectedItem.title}
+                  style={{ width: "100%", maxHeight: "520px", objectFit: "contain" }}
+                />
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px", background: "var(--surface-2)", padding: "16px 20px", borderRadius: "var(--radius)" }}>
+                <div>
+                  <small style={{ display: "block", fontSize: "10px", textTransform: "uppercase", color: "var(--muted)", fontWeight: 700, letterSpacing: "0.08em" }}>Responsible Department</small>
+                  <b style={{ fontSize: "14px", color: "var(--ink)" }}>{selectedItem.department}</b>
+                </div>
+                <div>
+                  <small style={{ display: "block", fontSize: "10px", textTransform: "uppercase", color: "var(--muted)", fontWeight: 700, letterSpacing: "0.08em" }}>Incident Location</small>
+                  <b style={{ fontSize: "14px", color: "var(--ink)" }}>⌖ {selectedItem.location}</b>
+                </div>
+                <div>
+                  <small style={{ display: "block", fontSize: "10px", textTransform: "uppercase", color: "var(--muted)", fontWeight: 700, letterSpacing: "0.08em" }}>Resolution Date</small>
+                  <b style={{ fontSize: "14px", color: "var(--ink)" }}>{fmt(selectedItem.resolvedAt)}</b>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", paddingTop: "8px" }}>
+                <a
+                  href={`/citizen?tracking=${encodeURIComponent(selectedItem.trackingId)}`}
+                  className="btn btn-line btn-small"
+                  style={{ textDecoration: "none" }}
+                >
+                  View full tracking trail →
+                </a>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-small"
+                  onClick={() => setSelectedItem(null)}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </Modal>
+        )}
       </div>
     </PublicLayout>
   );
